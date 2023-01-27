@@ -1,0 +1,59 @@
+
+version: '3.6'
+
+services:
+  giskard-engine:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile-installed-${DISTRO}
+    image: sawtooth-giskard-engine:${ISOLATION_ID}
+
+  giskard-cli:
+    build:
+      context: .
+      dockerfile: cli/Dockerfile-installed-${DISTRO}
+    image: sawtooth-giskard-cli:${ISOLATION_ID}
+
+  giskard-common:
+    build:
+      context: .
+      dockerfile: common/Dockerfile-installed-${DISTRO}
+    image: sawtooth-giskard-common:${ISOLATION_ID}
+
+  giskard-core:
+    build:
+      context: .
+      dockerfile: core/Dockerfile-installed-${DISTRO}
+    image: sawtooth-giskard-core:${ISOLATION_ID}
+    container_name: sawtooth-giskard-core-default
+
+  giskard-families:
+    build:
+      context: .
+      dockerfile: families/Dockerfile-installed-${DISTRO}
+    image: sawtooth-giskard-validator-registry-tp:${ISOLATION_ID}
+
+  #giskard-sgx:
+  #  build:
+  #    context: .
+  #    dockerfile: sgx/Dockerfile-installed-${DISTRO}
+  #  image: sawtooth-giskard-sgx:${ISOLATION_ID}
+  #  container_name: sawtooth-giskard-sgx-default
+
+  #giskard-simulator:
+  #  build:
+  #    context: .
+  #    dockerfile: simulator/Dockerfile-installed-${DISTRO}
+  #  image: sawtooth-giskard-simulator:${ISOLATION_ID}
+
+  #ias-client:
+  #  build:
+  #    context: .
+  #    dockerfile: ias_client/Dockerfile-installed-${DISTRO}
+  #  image: sawtooth-ias-client:${ISOLATION_ID}
+
+  #ias-proxy:
+  #  build:
+  #    context: .
+  #    dockerfile: ias_proxy/Dockerfile-installed-${DISTRO}
+  #  image: sawtooth-ias-proxy:${ISOLATION_ID}

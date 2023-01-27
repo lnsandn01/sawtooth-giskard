@@ -1,0 +1,57 @@
+version: '3.6'
+
+services:
+
+  giskard-engine:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile
+    image: sawtooth-giskard-engine-local:${ISOLATION_ID}
+    volumes:
+      - ./:/project/sawtooth-giskard
+
+  giskard-cli:
+    build:
+      context: .
+      dockerfile: cli/Dockerfile
+    image: sawtooth-giskard-cli-local:${ISOLATION_ID}
+    volumes:
+      - ./:/project/sawtooth-giskard
+
+  giskard-common:
+    build:
+      context: .
+      dockerfile: common/Dockerfile
+    image: sawtooth-giskard-common-local:${ISOLATION_ID}
+    volumes:
+      - ./:/project/sawtooth-giskard
+
+  giskard-core:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    image: sawtooth-giskard-core-local:${ISOLATION_ID}
+    volumes:
+      - ./:/project/sawtooth-giskard
+
+  giskard-families:
+    build:
+      context: .
+      dockerfile: families/Dockerfile
+    image: sawtooth-giskard-validator-registry-tp-local:${ISOLATION_ID}
+    volumes:
+      - ./:/project/sawtooth-giskard
+
+#  giskard-simulator:
+#    build:
+#      context: .
+#      dockerfile: simulator/Dockerfile
+#    image: sawtooth-giskard-simulator-local:${ISOLATION_ID}
+#    volumes:
+#      - ./:/project/sawtooth-giskard
+
+  giskard-tests:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    image: sawtooth-giskard-tests:${ISOLATION_ID}
