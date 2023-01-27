@@ -1,4 +1,4 @@
-# Giskard Consensus Protocol Analysis
+# Implementation of the Giskard Consensus Protocol for the Hyperledger Sawtooth modular blockchain
 
 The Giskard consensus protocol is used to validate transactions and computations in the [PlatON network](https://platon.network) and tolerates Byzantine failures among participating nodes.
 
