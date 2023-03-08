@@ -40,10 +40,39 @@ from sawtooth_poet.poet_consensus.poet_block_publisher \
     import PoetBlockPublisher
 from sawtooth_poet.poet_consensus.poet_block_verifier import PoetBlockVerifier
 from sawtooth_poet.poet_consensus.poet_fork_resolver import PoetForkResolver
+from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER, LAST_BLOCK_INDEX_IDENTIFIER
+from sawtooth_poet.poet_consensus import utils
 
 
 LOGGER = logging.getLogger(__name__)
 
+class GiskardOracle:
+    '''This is a wrapper around the Giskard structures (publisher,
+    verifier, fork resolver) and their attendant proxies.
+    '''
+    def __init__(self, service, component_endpoint,#TODO check those parameters
+                 config_dir, data_dir, key_dir):
+        self._config_dir = config_dir
+        self._data_dir = data_dir
+        self._signer = _load_identity_signer(key_dir, 'validator')
+        self._validator_id = self._signer.get_public_key().as_hex()
+
+        stream = Stream(component_endpoint)
+
+        self._block_cache = _BlockCacheProxy(service, stream)
+        self._state_view_factory = _StateViewFactoryProxy(service)
+
+        self._batch_publisher = _BatchPublisherProxy(stream, self._signer)
+        self._publisher = None
+
+    def generate_new_block(self, block, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
+        return GiskardBlock(block, 0)
+
+    def generate_last_block(self, block):
+        return self.generate_new_block(block, 3)
+
+    def about_generate_last_block(self, block):
+        return self.generate_last_block(block).block_height == block.block_height + 1 and utils.b_last(self.generate_last_block(block))
 
 class PoetOracle:
     '''This is a wrapper around the PoET structures (publisher,
@@ -106,13 +135,14 @@ class PoetOracle:
 
         return fork_resolver.compare_forks(cur_fork_head, new_fork_head)
 
+
 class GiskardBlock:
-    def __init__(self, block):
+    def __init__(self, block, block_index):
         # fields that come with consensus blocks
-        self.block_id = block.block_id #hash of the block -> corresponds to giskard b_h
-        self.previous_id = block.previous_id #hash of the previous block
+        self.block_id = block.block_id # hash of the block -> corresponds to giskard b_h
+        self.previous_id = block.previous_id # hash of the previous block
         self.signer_id = block.signer_id
-        self.block_num = block.block_num
+        self.block_num = block.block_num # block height
         self.payload = block.payload
         self.summary = block.summary
 
@@ -132,6 +162,26 @@ class GiskardBlock:
             ])
             + ")"
         )
+
+    def b_height(block):
+        return block.block_num
+
+    def b_index(block):
+        return block.block_index
+
+
+class GiskardGenesisBlock(GiskardBlock):
+    def __init__(self, block):
+        super().__init__(self, block)
+
+        # fields that come with consensus blocks
+        self.block_id = NULL_BLOCK_IDENTIFIER
+        self.previous_id = NULL_BLOCK_IDENTIFIER
+        self.block_num = 0
+
+        # fields that giskard requires
+        self.block_index = 0  # the block index in the current view
+
 
 class PoetBlock:
     def __init__(self, block):

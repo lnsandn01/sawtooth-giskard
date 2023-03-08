@@ -44,12 +44,14 @@ def b_last(b):
     """
     return b.block_index == LAST_BLOCK_INDEX_IDENTIFIER
 
-def block_eq(b1, b2):
+def block_eqb(b1, b2):
     return b1.block_id == b2.block_id and b1.previous_id == b2.previous_id and \
         b1.signer_id == b2.signer_id and b1.block_num == b2.block_num and \
         b1.payload == b2.payload and b1.summary == b2.summary
 
-def parent_of(b1, b2):
+#def block_eq_dec(b1, b2) if equal go left if unequal go right
+
+#def parent_of(b1, b2):
     
 
 
