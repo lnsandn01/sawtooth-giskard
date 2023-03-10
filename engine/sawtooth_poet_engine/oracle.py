@@ -65,6 +65,7 @@ class GiskardOracle:
         self._batch_publisher = _BatchPublisherProxy(stream, self._signer)
         self._publisher = None
 
+# TODO block as input is the parent block -> have to get the new child block from the handler in engine
     def generate_new_block(self, block, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
         return GiskardBlock(block, 0)
 
@@ -73,6 +74,73 @@ class GiskardOracle:
 
     def about_generate_last_block(self, block):
         return self.generate_last_block(block).block_height == block.block_height + 1 and utils.b_last(self.generate_last_block(block))
+
+    def about_non_last_block(self, block):
+        return not utils.b_last(self.generate_new_block(block))
+
+    def about_generate_new_block(self, block):
+        """ Lemma: proofs that all heights are correct;
+        GiskardBlock.b_height(self.generate_new_block(bock)) == GiskardBlock.b_height(block) + 1"""
+        return self.parent_block_height(block.block_num) and self.generate_new_block_parent(block)
+
+    def parent_of(self, block):
+        """tries to get the parent block from the store
+        :param block:
+        :return: GiskardBlock, or None
+        """
+        return self._block_cache.block_store.get_child_block(block) # check in Store if there is a block with height -1 and the previous id
+
+    def parent_ofb(self, block, parent):
+        """Test if parent block relation works with blocks in storage"""
+        return utils.block_eqb(self.parent_of(block), parent)
+
+    def parent_ofb_correct(self, depth):
+        """
+        Test if parent relation correct for all blocks in storage
+        :param depth: of the chain until testing is stopped
+        :return True if all parents are correct, False if one is not:
+        """
+        i = 0
+        child_block = None
+        for block in self._block_cache.block_store.get_block_iter(reverse=True):
+            if i == depth:
+                return True
+            if i == 0:
+                child_block = block
+                continue
+            else:
+                if not utils.block_eqb(self.parent_of(child_block), block):
+                    return False
+                else:
+                    i += 1
+                    child_block = block
+        return True
+
+    def parent_block_height(self, depth):
+        """Test if all parent blocks in storage have correct heights
+        :param depth: of the chain until testing is stopped
+        :return True if all parents' heights are correct, False if one is not:
+        """
+        i = 0
+        child_block = None
+        for block in self._block_cache.block_store.get_block_iter(reverse=True):
+            if i == depth:
+                return True
+            if i == 0:
+                child_block = block
+                continue
+            else:
+                if not self.parent_of(child_block).block_num + 1 == child_block.block_num:
+                    return False
+                else:
+                    i += 1
+                    child_block = block
+        return True
+
+    def generate_new_block_parent(self, block):
+        """Test if parent block realtion works with generation of new block"""
+        return utils.block_eqb(self.parent_of(self.generate_new_block(block)), block)
+
 
 class PoetOracle:
     '''This is a wrapper around the PoET structures (publisher,
@@ -318,6 +386,20 @@ class _BlockStoreProxy:
             yield previous_block
 
             curr = previous_block
+
+    def get_parent_block(self, child_block):
+        """
+        returns the child block, if there is one in storage
+        :param child_block:
+        :return: GiskardBlock(parent_block) or None
+        """
+        for block in self.get_block_iter(reverse=True):
+            if child_block.previous_id == block.block_id \
+                    and child_block.block_num - 1 == block.block_num:
+                return GiskardBlock(block)
+            if block.block_num >= child_block.block_num:
+                return None
+        return None
 
 
 class _StateViewFactoryProxy:
