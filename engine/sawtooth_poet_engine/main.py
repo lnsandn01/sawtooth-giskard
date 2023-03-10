@@ -24,7 +24,7 @@ from sawtooth_sdk.processor.config import get_log_config
 from sawtooth_sdk.processor.config import get_log_dir
 
 from sawtooth_sdk.consensus.zmq_driver import ZmqDriver
-from sawtooth_poet_engine.engine import PoetEngine
+from sawtooth_poet_engine.engine import PoetEngine, GiskardEngine
 
 from sawtooth_poet.config.path import load_path_config
 from sawtooth_poet.exceptions import LocalConfigurationError
@@ -65,6 +65,12 @@ def parse_args(args):
         .format(version),
         help='print version information')
 
+    parser.add_argument(
+        '-d', '--dishonest',
+        default="",
+        type=str,
+        help='sets this node as dishonest')
+
     return parser.parse_args(args)
 
 
@@ -90,14 +96,15 @@ def main(args=None):
             log_dir = get_log_dir()
             log_configuration(
                 log_dir=log_dir,
-                name='poet-engine')
+                name='giskard-engine')
 
         init_console_logging(verbose_level=opts.verbose)
 
         driver = ZmqDriver(
-            PoetEngine(
+            GiskardEngine(
                 path_config=path_config,
-                component_endpoint=opts.component))
+                component_endpoint=opts.component,
+                dishonest=opts.dishonest))
 
         driver.start(endpoint=opts.connect)
 

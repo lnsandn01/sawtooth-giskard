@@ -104,10 +104,11 @@ def start_node(num,
                scheduler_func,
                sawtooth_home,
                validator_cmd_func,
-               poet_kwargs):
+               poet_kwargs,
+               dishonest):
     rest_api = start_rest_api(num)
     processors = start_processors(num, processor_func)
-    engine = start_engine(num)
+    engine = start_engine(num, dishonest)
     validator = start_validator(num,
                                 peering_func,
                                 scheduler_func,
@@ -324,15 +325,16 @@ def start_processors(num, processor_func):
 
 # consensus engine
 
-def engine_cmd(num):
+def engine_cmd(num, dishonest): # TODO this is the place to connect to the consensus alg, i can set honest / dishonest here
     return 'poet-engine --connect {s} {v}'.format(
         s=engine_connection_address(num),
-        v='-v'
+        v='-v ',
+        d='-d dishonest'
     )
 
 
-def start_engine(num):
-    return start_process(engine_cmd(num))
+def start_engine(num, dishonest):
+    return start_process(engine_cmd(num, dishonest))
 
 
 # rest_api

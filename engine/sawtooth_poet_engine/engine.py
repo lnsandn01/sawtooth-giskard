@@ -28,6 +28,45 @@ from sawtooth_poet_engine.pending import PendingForks
 
 LOGGER = logging.getLogger(__name__)
 
+class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest node
+    def __init__(self, path_config, component_endpoint, dishonest):
+        # components
+        self._path_config = path_config
+        self._component_endpoint = component_endpoint
+        self._service = None
+        self._oracle = None
+
+        # state variables
+        self._exit = False
+        self._published = False
+        self._building = False
+        self._committing = False
+        self._dishonest = False
+        if dishonest == "dishonest":
+            self._dishonest = True
+
+        self._validating_blocks = set()
+        self._pending_forks_to_resolve = PendingForks()
+
+    # Ignore invalid override pylint issues
+    # pylint: disable=invalid-overridden-method
+    def name(self):
+        return 'Giskard'
+
+    # Ignore invalid override pylint issues
+    # pylint: disable=invalid-overridden-method
+    def version(self):
+        return '0.1'
+
+    def additional_protocols(self):
+        return [('giskard', '0.1')]
+
+    def stop(self):
+        self._exit = True
+
+    def engine_eqb(self, engine1, engine2):
+
+
 
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):
