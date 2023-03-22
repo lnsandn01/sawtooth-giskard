@@ -65,6 +65,20 @@ class GiskardOracle:
         self._batch_publisher = _BatchPublisherProxy(stream, self._signer)
         self._publisher = None
 
+    def __eq__(self, other):
+        if not isinstance(other, GiskardOracle):
+            # don't attempt to compare against unrelated types
+            return NotImplemented
+
+        return self._config_dir == other._config_dir \
+            and self._data_dir == other._data_dir \
+            and self._signer == other._signer \
+            and self._validator_id == other._validator_id \
+            and self._block_cache == other._block_cache \
+            and self._state_view_factory == other._state_view_factory \
+            and self._batch_publisher == other._batch_publisher
+            and self._publisher == other._publisher
+
 # TODO block as input is the parent block -> have to get the new child block from the handler in engine
     def generate_new_block(self, block, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
         return GiskardBlock(block, 0)
@@ -92,7 +106,7 @@ class GiskardOracle:
 
     def parent_ofb(self, block, parent):
         """Test if parent block relation works with blocks in storage"""
-        return utils.block_eqb(self.parent_of(block), parent)
+        return self.parent_of(block) == parent
 
     def parent_ofb_correct(self, depth):
         """
@@ -100,8 +114,7 @@ class GiskardOracle:
         :param depth: of the chain until testing is stopped
         :return True if all parents are correct, False if one is not:
         """
-        i = 0
-        child_block = None
+        (i, child_block) = (0, None)
         for block in self._block_cache.block_store.get_block_iter(reverse=True):
             if i == depth:
                 return True
@@ -109,7 +122,7 @@ class GiskardOracle:
                 child_block = block
                 continue
             else:
-                if not utils.block_eqb(self.parent_of(child_block), block):
+                if self.parent_of(child_block) != block:
                     return False
                 else:
                     i += 1
@@ -121,8 +134,7 @@ class GiskardOracle:
         :param depth: of the chain until testing is stopped
         :return True if all parents' heights are correct, False if one is not:
         """
-        i = 0
-        child_block = None
+        (i, child_block) = (0, None)
         for block in self._block_cache.block_store.get_block_iter(reverse=True):
             if i == depth:
                 return True
@@ -139,7 +151,7 @@ class GiskardOracle:
 
     def generate_new_block_parent(self, block):
         """Test if parent block realtion works with generation of new block"""
-        return utils.block_eqb(self.parent_of(self.generate_new_block(block)), block)
+        return self.parent_of(self.generate_new_block(block)) == block
 
 
 class PoetOracle:
@@ -216,6 +228,14 @@ class GiskardBlock:
 
         # fields that giskard requires
         self.block_index = 0 # the block index in the current view
+
+    def __eq__(self, other):
+        return self.block_id == other.block_id \
+            and self.previous_id == other.previous_id \
+            and self.signer_id == other.signer_id \
+            and self.block_num == other.block_num \
+            and self.payload == other.payload \
+            and self.summary == other.summary
 
     def __str__(self):
         return (
@@ -315,6 +335,13 @@ class _BlockCacheProxy:
         self.block_store = _BlockStoreProxy(service, stream)  # public
         self._service = service
 
+    def __eq__(self, other):
+        if not isinstance(other, _BlockCacheProxy):
+            return NotImplemented
+
+        return self.block_store == other.block_store \
+            and self._service == other._service
+
     def __getitem__(self, block_id):
         block_id = bytes.fromhex(block_id)
 
@@ -328,6 +355,13 @@ class _BlockStoreProxy:
     def __init__(self, service, stream):
         self._service = service
         self._stream = stream
+
+    def __eq__(self, other):
+        if not isinstance(other, _BlockStoreProxy):
+            return NotImplemented
+
+        return self._service == other._service \
+            and self._stream == other._stream
 
     @property
     def chain_head(self):
@@ -406,6 +440,12 @@ class _StateViewFactoryProxy:
     def __init__(self, service):
         self._service = service
 
+    def __eq__(self, other):
+        if not isinstance(other, _StateViewFactoryProxy):
+            return NotImplemented
+
+        return self._service == other._service
+
     def create_view(self, state_root_hash=None):
         '''The "state_root_hash" is really the block_id.'''
 
@@ -418,6 +458,13 @@ class _StateViewProxy:
     def __init__(self, service, block_id):
         self._service = service
         self._block_id = block_id
+
+    def __eq__(self, other):
+        if not isinstance(other, _StateViewProxy):
+            return NotImplemented
+
+        return self._service == other._service \
+            and self._block_id == other._block_id
 
     def get(self, address):
         result = self._service.get_state(
@@ -438,6 +485,13 @@ class _BatchPublisherProxy:
     def __init__(self, stream, signer):
         self.identity_signer = signer  # public
         self._stream = stream
+
+    def __eq__(self, other):
+        if not isinstance(other, _BatchPublisherProxy):
+            return NotImplemented
+
+        return self.identity_signer == other.identity_signer \
+            and self._stream == other._stream
 
     def send(self, transactions):
         txn_signatures = [txn.header_signature for txn in transactions]

@@ -24,6 +24,10 @@ class PendingForks:
         self._queue = []
         self._blocks = {}
 
+    def __eq__(self, other):
+        return self._queue == other._queue \
+            and self._blocks == other._blocks
+
     def push(self, block):
         try:
             index = self._queue.index(block.previous_id)

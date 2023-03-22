@@ -64,9 +64,22 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
     def stop(self):
         self._exit = True
 
-    def engine_eqb(self, engine1, engine2):
+    # TODO write tests to compare all running nodes
+    def __eq__(self, other):
+        return self._path_config == other._path_config \
+            and self._component_endpoint == other._component_endpoint \
+            and self._service == other._service \
+            and self._oracle == other._oracle \
+            and self._exit == other._exit \
+            and self._published == other._published \
+            and self._building == other._building \
+            and self._commiting == other._commiting \
+            and self._dishonest == other._dishonest \
+            and self._validating_blocks == other._validating_blocks \
+            and self._pending_forks_to_resolve == other._pending_forks_to_resolve
 
-
+    def honest_nodeb(self):
+        return not self._dishonest
 
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):
