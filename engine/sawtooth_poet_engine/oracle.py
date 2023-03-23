@@ -47,11 +47,11 @@ from sawtooth_poet.poet_consensus import utils
 LOGGER = logging.getLogger(__name__)
 
 class GiskardOracle:
-    '''This is a wrapper around the Giskard structures (publisher,
-    verifier, fork resolver) and their attendant proxies.
+    '''This is a wrapper around the Giskard structures (Propoeser,
+    validator) and their attendant proxies.
     '''
     def __init__(self, service, component_endpoint,#TODO check those parameters
-                 config_dir, data_dir, key_dir):
+                 config_dir, data_dir, key_dir, dishonest, peers):
         self._config_dir = config_dir
         self._data_dir = data_dir
         self._signer = _load_identity_signer(key_dir, 'validator')
@@ -64,6 +64,9 @@ class GiskardOracle:
 
         self._batch_publisher = _BatchPublisherProxy(stream, self._signer)
         self._publisher = None
+        self._dishonest = dishonest
+        self._k_peers = len(peers)
+        self._peers = peers
 
     def __eq__(self, other):
         if not isinstance(other, GiskardOracle):
@@ -76,20 +79,29 @@ class GiskardOracle:
             and self._validator_id == other._validator_id \
             and self._block_cache == other._block_cache \
             and self._state_view_factory == other._state_view_factory \
-            and self._batch_publisher == other._batch_publisher
-            and self._publisher == other._publisher
+            and self._batch_publisher == other._batch_publisher \
+            and self._publisher == other._publisher \
+            and self._dishonest == other._dishonest \
+            and self._k_nodes == other._k_nodes
 
-# TODO block as input is the parent block -> have to get the new child block from the handler in engine
+    def honest_nodeb(self):
+        return not self._dishonest
+
     def generate_new_block(self, block, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
+        """Generates a new giskard block
+        TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
         return GiskardBlock(block, 0)
 
     def generate_last_block(self, block):
+        """TODO still have to figure out if this should be a function or a test"""
         return self.generate_new_block(block, 3)
 
     def about_generate_last_block(self, block):
+        """Test if the next block to generate would be the last block"""
         return self.generate_last_block(block).block_height == block.block_height + 1 and utils.b_last(self.generate_last_block(block))
 
     def about_non_last_block(self, block):
+        """Test if the next to be generated block will be the last"""
         return not utils.b_last(self.generate_new_block(block))
 
     def about_generate_new_block(self, block):
@@ -152,6 +164,48 @@ class GiskardOracle:
     def generate_new_block_parent(self, block):
         """Test if parent block realtion works with generation of new block"""
         return self.parent_of(self.generate_new_block(block)) == block
+
+
+    def peer_disconnected(self, peer):
+        """Call from Giskard Engine if a peer disconnect message is received"""
+        --self._k_peers
+        self._peers.remove(peer)
+
+    def has_at_least_two_thirds(self, nodes):
+        """Check if the given nodes are a two third majority in the current view"""
+        matches = [value for value in nodes if value in self._peers]
+        return len(matches) / self._k_peers >= 2/3
+
+    def has_at_least_one_third(self, nodes):
+        """Check if the given nodes are at least a third of the peers in the current view"""
+        matches = [value for value in nodes if value in self._peers]
+        return len(matches) / self._k_peers >= 1/3
+
+    def majority_growth(self, nodes, node):
+        """is a two third majority reached when this node is added?"""
+        return GiskardOracle.has_at_least_two_thirds(nodes.append(node))
+
+    def majority_shrink(self, nodes, node):
+        """if the given node is removed from nodes, is the two third majority lost?"""
+        return not GiskardOracle.has_at_least_two_thirds(nodes.remove(node))
+
+    def intersection_property(self, nodes1, nodes2):
+        """Don't know if actually needed;
+        Checks if the intersection between two lists of nodes, is at least one third of the peers"""
+        if GiskardOracle.has_at_least_two_thirds(nodes1) \
+                and GiskardOracle.has_at_least_two_thirds(nodes2):
+            matches = [value for value in nodes1 if value in nodes2]
+            return GiskardOracle.has_at_least_one_third(matches)
+        return False
+
+    def is_member(self, node, nodes):
+        """checks if a node is actually in a list of nodes"""
+        return node in nodes
+
+    def evil_participants_no_majority(self):
+        """Returns True if there is no majority of dishonest nodes
+        TODO make peers of type GiskardNode"""
+        return not GiskardOracle.has_at_least_one_third(filter(lambda peer: not peer.honest_nodeb(), self._peers))
 
 
 class PoetOracle:

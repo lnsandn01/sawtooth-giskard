@@ -22,14 +22,14 @@ from sawtooth_sdk.consensus.engine import Engine
 from sawtooth_sdk.consensus import exceptions
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 
-from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock
+from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, GiskardOracle, GiskardBlock
 from sawtooth_poet_engine.pending import PendingForks
 
 
 LOGGER = logging.getLogger(__name__)
 
 class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest node
-    def __init__(self, path_config, component_endpoint, dishonest):
+    def __init__(self, path_config, component_endpoint, dishonest, peers):
         # components
         self._path_config = path_config
         self._component_endpoint = component_endpoint
@@ -46,7 +46,8 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
             self._dishonest = True
 
         self._validating_blocks = set()
-        self._pending_forks_to_resolve = PendingForks()
+        self._peers = peers
+
 
     # Ignore invalid override pylint issues
     # pylint: disable=invalid-overridden-method
@@ -75,11 +76,19 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
             and self._building == other._building \
             and self._commiting == other._commiting \
             and self._dishonest == other._dishonest \
-            and self._validating_blocks == other._validating_blocks \
-            and self._pending_forks_to_resolve == other._pending_forks_to_resolve
+            and self._validating_blocks == other._validating_blocks
 
-    def honest_nodeb(self):
-        return not self._dishonest
+    def start(self, updates, service, startup_state):
+        self._service = service
+        self._oracle = GiskardOracle(
+            service=service,
+            component_endpoint=self._component_endpoint,
+            config_dir=self._path_config.config_dir,
+            data_dir=self._path_config.data_dir,
+            key_dir=self._path_config.key_dir,
+            dishonest=self._dishonest,
+            peers=self._peers)# TODO check if actually connected to the given peers from a test
+
 
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):

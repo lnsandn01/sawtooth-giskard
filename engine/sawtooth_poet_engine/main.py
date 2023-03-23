@@ -71,6 +71,12 @@ def parse_args(args):
         type=str,
         help='sets this node as dishonest')
 
+    parser.add_argument(
+        '-p', '--peers',
+        default="",
+        type=str,
+        help='gives initial peers to connect to')
+
     return parser.parse_args(args)
 
 
@@ -104,7 +110,8 @@ def main(args=None):
             GiskardEngine(
                 path_config=path_config,
                 component_endpoint=opts.component,
-                dishonest=opts.dishonest))
+                dishonest=opts.dishonest,
+                peers=opts.peers))
 
         driver.start(endpoint=opts.connect)
 
