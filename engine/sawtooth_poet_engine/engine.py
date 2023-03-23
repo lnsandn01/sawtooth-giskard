@@ -76,7 +76,8 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
             and self._building == other._building \
             and self._commiting == other._commiting \
             and self._dishonest == other._dishonest \
-            and self._validating_blocks == other._validating_blocks
+            and self._validating_blocks == other._validating_blocks \
+            and self._peers == other._peers
 
     def start(self, updates, service, startup_state):
         self._service = service
@@ -89,6 +90,50 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
             dishonest=self._dishonest,
             peers=self._peers)# TODO check if actually connected to the given peers from a test
 
+        # 1. Wait for an incoming message.
+        # 2. Check for exit.
+        # 3. Handle the message.
+        # 4. Check for publishing.
+
+        handlers = {
+            Message.CONSENSUS_NOTIFY_BLOCK_NEW: self._handle_new_block,
+            Message.CONSENSUS_NOTIFY_BLOCK_VALID: self._handle_valid_block,
+            Message.CONSENSUS_NOTIFY_BLOCK_INVALID: self._handle_invalid_block,
+            Message.CONSENSUS_NOTIFY_BLOCK_COMMIT: self._handle_committed_block,
+            Message.CONSENSUS_NOTIFY_PEER_CONNECTED: self._handle_peer_msgs,
+            Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED: self._handle_peer_msgs,
+            Message.CONSENSUS_NOTIFY_PEER_MESSAGE: self._handle_peer_msgs,
+            Message.CONSENSUS_PREPARE_BLOCK: self._handle_prepare_block,
+            Message.CONSENSUS_PREPARE_VOTE: self._handle_prepare_vote,
+            Message.CONSENSUS_VIEW_CHANGE: self._handle_view_change,
+            Message.CONSENSUS_PREPARE_QC: self._handle_prepare_qc,
+            Message.CONSENSUS_VIEW_CHANGE_QC: self._handle_view_change_qc
+        }
+
+        while True:
+            try:
+                try:
+                    type_tag, data = updates.get(timeout=0.1)
+                except queue.Empty:
+                    pass
+                else:
+                    LOGGER.debug('Received message: %s',
+                                 Message.MessageType.Name(type_tag))
+
+                    try:
+                        handle_message = handlers[type_tag]
+                    except KeyError:
+                        LOGGER.error('Unknown type tag: %s',
+                                     Message.MessageType.Name(type_tag))
+                    else:
+                        handle_message(data)
+
+                if self._exit:
+                    break
+
+                self._try_to_publish()
+            except Exception:  # pylint: disable=broad-except
+                LOGGER.exception("Unhandled exception in message loop")
 
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):
@@ -228,11 +273,15 @@ class PoetEngine(Engine):
             Message.CONSENSUS_NOTIFY_BLOCK_NEW: self._handle_new_block,
             Message.CONSENSUS_NOTIFY_BLOCK_VALID: self._handle_valid_block,
             Message.CONSENSUS_NOTIFY_BLOCK_INVALID: self._handle_invalid_block,
-            Message.CONSENSUS_NOTIFY_BLOCK_COMMIT:
-                self._handle_committed_block,
+            Message.CONSENSUS_NOTIFY_BLOCK_COMMIT: self._handle_committed_block,
             Message.CONSENSUS_NOTIFY_PEER_CONNECTED: self._handle_peer_msgs,
             Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED: self._handle_peer_msgs,
             Message.CONSENSUS_NOTIFY_PEER_MESSAGE: self._handle_peer_msgs,
+            Message.CONSENSUS_PREPARE_BLOCK: self._handle_prepare_block,
+            Message.CONSENSUS_PREPARE_VOTE: self._handle_prepare_vote,
+            Message.CONSENSUS_VIEW_CHANGE: self._handle_view_change,
+            Message.CONSENSUS_PREPARE_QC: self._handle_prepare_qc,
+            Message.CONSENSUS_VIEW_CHANGE_QC: self._handle_view_change_qc
         }
 
         while True:
