@@ -17,26 +17,34 @@ import logging
 import queue
 
 import json
+from collections import namedtuple
 
+from messaging.stream import Stream
 from sawtooth_sdk.consensus.engine import Engine
 from sawtooth_sdk.consensus import exceptions
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 
-from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, GiskardOracle, GiskardBlock
+from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, _BlockCacheProxy
+from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.pending import PendingForks
 
 
 LOGGER = logging.getLogger(__name__)
 
+
 class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest node
+    """The entrypoint for Giskard
+        Keeps state
+        Handles incoming messages, validates blocks
+        Proposes new Blocks if it is Proposer in the current view"""
     def __init__(self, path_config, component_endpoint, dishonest, peers):
         # components
         self._path_config = path_config
         self._component_endpoint = component_endpoint
         self._service = None
-        self._oracle = None
+        self._block_cache
 
-        # state variables
+        # mostly still poet state variables
         self._exit = False
         self._published = False
         self._building = False
@@ -44,9 +52,17 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
         self._dishonest = False
         if dishonest == "dishonest":
             self._dishonest = True
-
         self._validating_blocks = set()
         self._peers = peers
+        self._k_peers = len(peers)
+
+        # NState
+        self._node_view = 0 # view number
+        self.node_id = self._validator_id # node identifier TODO get that from the registry service / the epoch protocol
+        self._in_messages = []
+        self._counting_messages = []
+        self._out_messages = []
+        self._timeout = False
 
 
     # Ignore invalid override pylint issues
@@ -81,14 +97,8 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
 
     def start(self, updates, service, startup_state):
         self._service = service
-        self._oracle = GiskardOracle(
-            service=service,
-            component_endpoint=self._component_endpoint,
-            config_dir=self._path_config.config_dir,
-            data_dir=self._path_config.data_dir,
-            key_dir=self._path_config.key_dir,
-            dishonest=self._dishonest,
-            peers=self._peers)# TODO check if actually connected to the given peers from a test
+        stream = Stream(self._component_endpoint)
+        self._block_cache = _BlockCacheProxy(self._service, stream)
 
         # 1. Wait for an incoming message.
         # 2. Check for exit.
@@ -134,6 +144,8 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
                 self._try_to_publish()
             except Exception:  # pylint: disable=broad-except
                 LOGGER.exception("Unhandled exception in message loop")
+
+
 
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):
