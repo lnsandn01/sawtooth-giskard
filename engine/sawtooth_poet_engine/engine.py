@@ -56,7 +56,7 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
         self._peers = peers
         self._k_peers = len(peers)
 
-        # NState
+        # original NState from the formal specification
         self._node_view = 0 # view number
         self.node_id = self._validator_id # node identifier TODO get that from the registry service / the epoch protocol
         self._in_messages = []

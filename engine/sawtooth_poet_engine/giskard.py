@@ -9,7 +9,8 @@ class Giskard:
         gets called by GiskardEngine for incoming messages
         has all functionalities in a procedural style"""
 
-    # region State methods
+    # region state methods
+    # TODO maybe extend to more required fields, or keep as a comparison to the formal specification
     NState = namedtuple("_node_view, node_id, _in_messages, _counting_messages, _out_messages, _timeout")
 
     @staticmethod
@@ -34,6 +35,13 @@ class Giskard:
         return True
 
     # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
+
+    @staticmethod
+    def record_set(state, m: GiskardMessage):
+        """adds a message to the out_message buffer
+        input NState, GiskardMessage
+        returns NState"""
+        return state.out_messages.Append(m)
     # endregion
 
     # region block methods
