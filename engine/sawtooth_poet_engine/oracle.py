@@ -15,7 +15,9 @@
 
 import logging
 import os
+from collections import namedtuple
 
+import oracle
 import sawtooth_signing as signing
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
@@ -47,7 +49,7 @@ from sawtooth_poet.poet_consensus import utils
 LOGGER = logging.getLogger(__name__)
 
 class GiskardOracle:
-    '''This is a wrapper around the Giskard structures (Propoeser,
+    '''This is a wrapper around the Giskard structures (Proposer,
     validator) and their attendant proxies.
     '''
     def __init__(self, service, component_endpoint,#TODO check those parameters
@@ -68,6 +70,15 @@ class GiskardOracle:
         self._k_peers = len(peers)
         self._peers = peers
 
+        # NState
+        self._node_view = 0 # view number
+        self.node_id = self._validator_id # node identifier TODO get that from the registry service / the epoch protocol
+        self._in_messages = []
+        self._counting_messages = []
+        self._out_messages = []
+        self._timeout = False
+
+
     def __eq__(self, other):
         if not isinstance(other, GiskardOracle):
             # don't attempt to compare against unrelated types
@@ -84,8 +95,26 @@ class GiskardOracle:
             and self._dishonest == other._dishonest \
             and self._k_nodes == other._k_nodes
 
+    NState = namedtuple("_node_view, node_id, _in_messages, _counting_messages, _out_messages, _timeout")
+    def NState_get(self):
+        return self.NState(self._node_view,
+                            self.node_id,
+                            self._in_messages,
+                            self._counting_messages,
+                            self._out_messages,
+                            self._timeout)
+
+    @staticmethod
+    def NState_eqb(s1: NState, s2: NState):
+        return s1 == s2
+
     def honest_nodeb(self):
         return not self._dishonest
+
+    def is_block_proposer(self): # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+        return True
+
+    #def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
 
     def generate_new_block(self, block, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
         """Generates a new giskard block
@@ -165,6 +194,13 @@ class GiskardOracle:
         """Test if parent block realtion works with generation of new block"""
         return self.parent_of(self.generate_new_block(block)) == block
 
+    @staticmethod
+    def higher_block(b1: oracle.GiskardBlock, b2: oracle.GiskardBlock):
+        return b1 if (b1.block_num > b2.block_num) else b2
+
+    @staticmethod
+    def message_with_higher_block(msg1, msg2):
+        oracle.higher_block(msg1.block, msg2.block)
 
     def peer_disconnected(self, peer):
         """Call from Giskard Engine if a peer disconnect message is received"""
@@ -183,19 +219,19 @@ class GiskardOracle:
 
     def majority_growth(self, nodes, node):
         """is a two third majority reached when this node is added?"""
-        return GiskardOracle.has_at_least_two_thirds(nodes.append(node))
+        return self.has_at_least_two_thirds(nodes.append(node))
 
     def majority_shrink(self, nodes, node):
         """if the given node is removed from nodes, is the two third majority lost?"""
-        return not GiskardOracle.has_at_least_two_thirds(nodes.remove(node))
+        return not self.has_at_least_two_thirds(nodes.remove(node))
 
     def intersection_property(self, nodes1, nodes2):
         """Don't know if actually needed;
         Checks if the intersection between two lists of nodes, is at least one third of the peers"""
-        if GiskardOracle.has_at_least_two_thirds(nodes1) \
-                and GiskardOracle.has_at_least_two_thirds(nodes2):
+        if self.has_at_least_two_thirds(nodes1) \
+                and self.has_at_least_two_thirds(nodes2):
             matches = [value for value in nodes1 if value in nodes2]
-            return GiskardOracle.has_at_least_one_third(matches)
+            return self.has_at_least_one_third(matches)
         return False
 
     def is_member(self, node, nodes):
@@ -205,8 +241,30 @@ class GiskardOracle:
     def evil_participants_no_majority(self):
         """Returns True if there is no majority of dishonest nodes
         TODO make peers of type GiskardNode"""
-        return not GiskardOracle.has_at_least_one_third(filter(lambda peer: not peer.honest_nodeb(), self._peers))
+        return not self.has_at_least_one_third(filter(lambda peer: not peer.honest_nodeb(), self._peers))
 
+    # messages
+    @staticmethod
+    def message_eqb(message1, message2):
+        return message1.message_type == message2.message_type \
+            and message1.view == message2.view \
+            and message1.sender == message2.sender \
+            and message1.block == message2.block \
+            and message1.piggy_back_block == message2.piggy_back_block
+
+    def quorum(self, lm):
+        self.has_at_least_two_thirds(map(GiskardMessage.sender(), lm))# TODO get the message class
+
+    # Dont know if i even need this
+    """def quorum_subset(self, lm1, lm2):
+        if self.quorum(lm1) \
+                and self.quorum(lm2):
+            matches = [value for value in  if value in nodes2]
+            return self.has_at_least_one_third(matches)
+        return False"""
+
+    def quorum_growth(self, lm, msg):
+        return self.has_at_least_two_thirds(map(GiskardMessage.sender(), lm.Append(msg)))# TODO get the message class
 
 class PoetOracle:
     '''This is a wrapper around the PoET structures (publisher,

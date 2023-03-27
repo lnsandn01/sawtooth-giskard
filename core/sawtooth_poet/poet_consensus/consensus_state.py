@@ -52,13 +52,7 @@ total_block_claim_count (int): The total number of the blocks that the
     validator has claimed
 """
 
-class NState(typing.NamedTuple):
-    node_view: int
-    node_id: int
-    in_messages: list
-    counting_messages: list
-    out_messages: list
-    timeout: bool
+
 
 class GiskardConsensusState:
 #    def prepare_stage_in_view(nstate, view, block):

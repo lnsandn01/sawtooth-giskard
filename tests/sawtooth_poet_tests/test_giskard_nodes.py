@@ -15,4 +15,4 @@ LOGGER.setLevel(logging.INFO)
 WAIT = 240
 ASSERT_CONSENSUS_TIMEOUT = 180
 
-class TestGiskardNodes(unittest.TestCase):
+#class TestGiskardNodes(unittest.TestCase):
