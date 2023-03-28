@@ -22,17 +22,18 @@ from collections import namedtuple
 from messaging.stream import Stream
 from sawtooth_sdk.consensus.engine import Engine
 from sawtooth_sdk.consensus import exceptions
-from sawtooth_sdk.protobuf.validator_pb2 import Message
+from sawtooth_sdk.protobuf import Message
 
 from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, _BlockCacheProxy
 from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
+from sawtooth_poet_engine.giskard import Giskard, NState, GiskardMessage
 from sawtooth_poet_engine.pending import PendingForks
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest node
+class GiskardEngine(Engine): # is a GiskardNode
     """The entrypoint for Giskard
         Keeps state
         Handles incoming messages, validates blocks
@@ -51,19 +52,21 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
         self._committing = False
         self._dishonest = False
         if dishonest == "dishonest":
-            self._dishonest = True
+            self.dishonest = True
         self._validating_blocks = set()
-        self._peers = peers
-        self._k_peers = len(peers)
+        self.peers = peers
+        self.k_peers = len(peers)
 
         # original NState from the formal specification
-        self._node_view = 0 # view number
-        self.node_id = self._validator_id # node identifier TODO get that from the registry service / the epoch protocol
-        self._in_messages = []
-        self._counting_messages = []
-        self._out_messages = []
-        self._timeout = False
+        self.nstate = NState(self)# node identifier TODO get that from the registry service / the epoch protocol
 
+    def honest_node(self):
+        return not self.dishonest
+
+    def is_block_proposer(self):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+        return True
+
+    # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
 
     # Ignore invalid override pylint issues
     # pylint: disable=invalid-overridden-method
@@ -144,7 +147,6 @@ class GiskardEngine(Engine): # TODO could implement giskard honest and dishonest
                 self._try_to_publish()
             except Exception:  # pylint: disable=broad-except
                 LOGGER.exception("Unhandled exception in message loop")
-
 
 
 class PoetEngine(Engine):

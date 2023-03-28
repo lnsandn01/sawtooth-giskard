@@ -1,8 +1,47 @@
 from collections import namedtuple
 
+from engine import GiskardEngine
 from giskard_block import GiskardBlock
 from poet_consensus import utils
 
+
+class NState:
+    def __init__(self, node: GiskardEngine):
+        self.node_view = 0
+        self.node_id = node.validator_id
+        self.in_messages = []
+        self.counting_messages = []
+        self.out_messages = []
+        self.timeout = False
+
+    def __eq__(self, other):
+        if not isinstance(other, NState):
+            return NotImplemented
+        return self.node_view == other.node_view \
+            and self.node_id == other.node_id \
+            and self.in_messages == other.in_messages \
+            and self.counting_messages == other.counting_messages \
+            and self.out_messages == other.out_messages \
+            and self.timeout == other.timeout
+
+
+class GiskardMessage:
+    def __init__(self, message_type, view, sender, block, piggyback_block):
+        self.message_type = message_type
+        self.view = view
+        self.sender = sender
+        self.block = block
+        self.piggyback_block = piggyback_block
+
+    def __eq__(self, other):
+        # TODO check if sender should be node instead of just address
+        if not isinstance(other, GiskardMessage):
+            return NotImplemented
+        return self.message_type == other.message_type \
+            and self.view == other.view \
+            and self.sender == other.sender \
+            and self.block == other.block \
+            and self.piggyback_block == other.piggyback_block
 
 class Giskard:
     """The main class for Giskard
@@ -10,84 +49,87 @@ class Giskard:
         has all functionalities in a procedural style"""
 
     # region state methods
-    # TODO maybe extend to more required fields, or keep as a comparison to the formal specification
-    NState = namedtuple("_node_view, node_id, _in_messages, _counting_messages, _out_messages, _timeout")
 
     @staticmethod
-    def NState_get(state):
-        return state.NState(state._node_view,
-                           state.node_id,
-                           state._in_messages,
-                           state._counting_messages,
-                           state._out_messages,
-                           state._timeout)
-
-    @staticmethod
-    def NState_eqb(s1: NState, s2: NState):
-        return s1 == s2
-
-    @staticmethod
-    def honest_nodeb(state):
-        return not state._dishonest
-
-    @staticmethod
-    def is_block_proposer(state):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
-        return True
-
-    # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
-
-    @staticmethod
-    def record_set(state, m: GiskardMessage):
+    def record_set(state: NState, msg: GiskardMessage):
         """adds a message to the out_message buffer
         input NState, GiskardMessage
         returns NState"""
-        return state.out_messages.Append(m)
+        state.out_messages.append(msg)
+        return state
+
+    @staticmethod
+    def record_plural_set(state: NState, lm: list(GiskardMessage)):
+        state.out_messages.extend(lm)
+        return state
+
+    @staticmethod
+    def add_set(state: NState, msg: GiskardMessage):
+        state.in_messages.append(msg)
+        return state
+
+    @staticmethod
+    def add_plural_set(state: NState, lm: list(GiskardMessage)):
+        state.in_messages.extend(lm)
+        return state
+
+    @staticmethod
+    def discard_set(state: NState, msg: GiskardMessage):
+        state.in_messages.remove(msg)
+        return state
+
+    @staticmethod
+    def process_set(state: NState, msg: GiskardMessage):
+        state = Giskard.discard_set(state, msg)
+        state.counting_messages.append(msg)
+        return state
     # endregion
 
     # region block methods
     @staticmethod
-    def generate_new_block(state, block, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
+    def generate_new_block(state: NState, block: GiskardBlock, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
         """Generates a new giskard block
         TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
         return GiskardBlock(block, 0)
 
     @staticmethod
-    def generate_last_block(state, block):
+    def generate_last_block(state: NState, block: GiskardBlock):
         """TODO still have to figure out if this should be a function or a test"""
         return Giskard.generate_new_block(state, block, 3)
 
     @staticmethod
-    def about_generate_last_block(state, block):
+    def about_generate_last_block(state: NState, block: GiskardBlock):
         """Test if the next block to generate would be the last block"""
         return Giskard.generate_last_block(state, block).block_height == block.block_height + 1 and utils.b_last(
             Giskard.generate_last_block(state, block))
 
     @staticmethod
-    def about_non_last_block(state, block):
+    def about_non_last_block(state: NState, block: GiskardBlock):
         """Test if the next to be generated block will be the last"""
         return not utils.b_last(Giskard.generate_new_block(state, block))
 
     @staticmethod
-    def about_generate_new_block(state, block):
+    def about_generate_new_block(state: NState, block: GiskardBlock):
         """ Lemma: proofs that all heights are correct;
         GiskardBlock.b_height(Giskard.generate_new_block(bock)) == GiskardBlock.b_height(block) + 1"""
         return Giskard.parent_block_height(state, block.block_num) and Giskard.generate_new_block_parent(state, block)
 
     @staticmethod
-    def parent_of(state, block):
+    def parent_of(state: NState, block: GiskardBlock):
         """tries to get the parent block from the store
         :param block:
         :return: GiskardBlock, or None
         """
-        return state._block_cache.block_store.get_child_block(block)  # check in Store if there is a block with height -1 and the previous id
+        return state._block_cache.block_store.get_child_block(
+            block)  # check in Store if there is a block with height -1 and the previous id
 
     @staticmethod
-    def parent_ofb(state, block, parent):
+    def parent_ofb(state: NState, block: GiskardBlock, parent: GiskardBlock):
         """Test if parent block relation works with blocks in storage"""
         return Giskard.parent_of(state, block) == parent
 
     @staticmethod
-    def parent_ofb_correct(state, depth):
+    def parent_ofb_correct(state: NState, depth):
         """
         Test if parent relation correct for all blocks in storage
         :param depth: of the chain until testing is stopped
@@ -109,7 +151,7 @@ class Giskard:
         return True
 
     @staticmethod
-    def parent_block_height(state, depth):
+    def parent_block_height(state: NState, depth):
         """Test if all parent blocks in storage have correct heights
         :param depth: of the chain until testing is stopped
         :return True if all parents' heights are correct, False if one is not:
@@ -130,44 +172,45 @@ class Giskard:
         return True
 
     @staticmethod
-    def generate_new_block_parent(state, block):
+    def generate_new_block_parent(state: NState, block: GiskardBlock):
         """Test if parent block realtion works with generation of new block"""
         return Giskard.parent_of(Giskard.generate_new_block(state, block)) == block
 
     @staticmethod
     def higher_block(b1: GiskardBlock, b2: GiskardBlock):
         return b1 if (b1.block_num > b2.block_num) else b2
+
     # endregion
 
     # region messages and quorum methods
     @staticmethod
-    def message_with_higher_block(msg1, msg2):
+    def message_with_higher_block(msg1: GiskardMessage, msg2: GiskardMessage):
         Giskard.higher_block(msg1.block, msg2.block)
 
     @staticmethod
-    def has_at_least_two_thirds(state, nodes):
+    def has_at_least_two_thirds(nodes: list(GiskardEngine), peers: list(GiskardEngine)):
         """Check if the given nodes are a two third majority in the current view"""
-        matches = [value for value in nodes if value in state._peers]
-        return len(matches) / state._k_peers >= 2 / 3
+        matches = [node for node in nodes if node in peers]
+        return len(matches) / len(peers) >= 2 / 3
 
     @staticmethod
-    def has_at_least_one_third(state, nodes):
+    def has_at_least_one_third(nodes: list(GiskardEngine), peers: list(GiskardEngine)):
         """Check if the given nodes are at least a third of the peers in the current view"""
-        matches = [value for value in nodes if value in state._peers]
-        return len(matches) / state._k_peers >= 1 / 3
+        matches = [node for node in nodes if node in peers]
+        return len(matches) / len(peers) >= 1 / 3
 
     @staticmethod
-    def majority_growth(state, nodes, node):
+    def majority_growth(nodes: list(GiskardEngine), node: GiskardEngine, peers: list(GiskardEngine)):
         """is a two third majority reached when this node is added?"""
-        return Giskard.has_at_least_two_thirds(state, nodes.append(node))
+        return Giskard.has_at_least_two_thirds(nodes.append(node), peers)
 
     @staticmethod
-    def majority_shrink(state, nodes, node):
+    def majority_shrink(nodes: list(GiskardEngine), node: GiskardEngine, peers: list(GiskardEngine)):
         """if the given node is removed from nodes, is the two third majority lost?"""
-        return not Giskard.has_at_least_two_thirds(state, nodes.remove(node))
+        return not Giskard.has_at_least_two_thirds(nodes.remove(node), peers)
 
     @staticmethod
-    def intersection_property(state, nodes1, nodes2):
+    def intersection_property(state: NState, nodes1: list(GiskardEngine), nodes2: list(GiskardEngine)):
         """Don't know if actually needed;
         Checks if the intersection between two lists of nodes, is at least one third of the peers"""
         if Giskard.has_at_least_two_thirds(state, nodes1) \
@@ -177,30 +220,21 @@ class Giskard:
         return False
 
     @staticmethod
-    def is_member(node, nodes):
+    def is_member(node: GiskardEngine, nodes: list(GiskardEngine)):
         """checks if a node is actually in a list of nodes"""
         return node in nodes
 
     @staticmethod
-    def evil_participants_no_majority(state):
+    def evil_participants_no_majority(peers: list(GiskardEngine)):
         """Returns True if there is no majority of dishonest nodes
         TODO make peers of type GiskardNode"""
-        return not Giskard.has_at_least_one_third(state, filter(lambda peer: not peer.honest_nodeb(), state._peers))
-
-    # messages
-    @staticmethod
-    def message_eqb(message1, message2):
-        return message1.message_type == message2.message_type \
-            and message1.view == message2.view \
-            and message1.sender == message2.sender \
-            and message1.block == message2.block \
-            and message1.piggy_back_block == message2.piggy_back_block
+        return not Giskard.has_at_least_one_third(filter(lambda peer: not GiskardEngine.honest_node(peer), peers))
 
     @staticmethod
-    def quorum(state, lm):
-        Giskard.has_at_least_two_thirds(state, map(GiskardMessage.sender(), lm))  # TODO get the message class
+    def quorum(lm: list(GiskardMessage), peers: list(GiskardEngine)):
+        Giskard.has_at_least_two_thirds([msg.sender for msg in lm], peers)
 
-    # Dont know if i even need this
+    # Don't know if i even need this
     """@staticmethod
         def quorum_subset(self, lm1, lm2):
         if self.quorum(lm1) \
@@ -210,7 +244,6 @@ class Giskard:
         return False"""
 
     @staticmethod
-    def quorum_growth(state, lm, msg):
-        return Giskard.has_at_least_two_thirds(state,
-            map(GiskardMessage.sender(), lm.Append(msg)))  # TODO get the message class
+    def quorum_growth(lm: list(GiskardMessage), msg: GiskardMessage, peers: list(GiskardEngine)):
+        return Giskard.has_at_least_two_thirds([msg1.sender for msg1 in lm.append(msg)], peers)
     # endregion

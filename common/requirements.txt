@@ -1,0 +1,5 @@
+setuptools~=65.5.1
+toml~=0.10.2
+colorlog~=6.7.0
+pyzmq~=25.0.2
+PyYAML~=6.0
