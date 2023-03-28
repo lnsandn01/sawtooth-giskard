@@ -3,9 +3,12 @@ from collections import namedtuple
 from engine import GiskardEngine
 from giskard_block import GiskardBlock
 from poet_consensus import utils
+from sawtooth_sdk.protobuf import Message
 
 
 class NState:
+    """State the Giskard node is in"""
+
     def __init__(self, node: GiskardEngine):
         self.node_view = 0
         self.node_id = node.validator_id
@@ -26,6 +29,8 @@ class NState:
 
 
 class GiskardMessage:
+    """All Giskard messages have at least those fields"""
+
     def __init__(self, message_type, view, sender, block, piggyback_block):
         self.message_type = message_type
         self.view = view
@@ -43,51 +48,174 @@ class GiskardMessage:
             and self.block == other.block \
             and self.piggyback_block == other.piggyback_block
 
+
 class Giskard:
     """The main class for Giskard
-        gets called by GiskardEngine for incoming messages
-        has all functionalities in a procedural style"""
+        gets called by GiskardEngine for incoming messages"""
 
-    # region state methods
+    # region local state operations
+    @staticmethod
+    def received(state: NState, msg: GiskardMessage):
+        """Returns True if the msg is in the in_messages buffer"""
+        return state.in_messages.__contains__(msg)
 
     @staticmethod
-    def record_set(state: NState, msg: GiskardMessage):
-        """adds a message to the out_message buffer
-        input NState, GiskardMessage
-        returns NState"""
+    def sent(state: NState, msg: GiskardMessage):
+        """Returns True if the msg is in the out_messages buffer"""
+        return state.out_messages.__contains__(msg)
+
+    @staticmethod
+    def record(state: NState, msg: GiskardMessage):
+        """Adds a message to the out_message buffer"""
         state.out_messages.append(msg)
         return state
 
     @staticmethod
-    def record_plural_set(state: NState, lm: list(GiskardMessage)):
+    def record_plural(state: NState, lm: list(GiskardMessage)):
+        """Adds several messages to the out_message buffer"""
         state.out_messages.extend(lm)
         return state
 
     @staticmethod
-    def add_set(state: NState, msg: GiskardMessage):
+    def add(state: NState, msg: GiskardMessage):
+        """Broadcast messages are stored in the in_messages buffer,
+        awaiting processing"""
         state.in_messages.append(msg)
         return state
 
     @staticmethod
-    def add_plural_set(state: NState, lm: list(GiskardMessage)):
+    def add_plural(state: NState, lm: list(GiskardMessage)):
+        """Adds several messages to the in_messages buffer"""
         state.in_messages.extend(lm)
         return state
 
     @staticmethod
-    def discard_set(state: NState, msg: GiskardMessage):
+    def discard(state: NState, msg: GiskardMessage):
+        """Removes an invalid message from the in_messages buffer"""
         state.in_messages.remove(msg)
         return state
 
     @staticmethod
-    def process_set(state: NState, msg: GiskardMessage):
-        state = Giskard.discard_set(state, msg)
+    def process(state: NState, msg: GiskardMessage):
+        """Takes a message, removes it from the in_messages buffer
+         and moves it to the counting_messages buffer, as it has been processed."""
+        state = Giskard.discard(state, msg)
         state.counting_messages.append(msg)
         return state
+
+    @staticmethod
+    def increment_view(state: NState):
+        """View change happened,
+        increments the view number, resets in_messages buffer and timeout variable."""
+        ++state.node_view
+        state.in_messages = []
+        state.timeout = False
+
+    @staticmethod
+    def flip_timeout(state: NState):
+        """Sets the timeout variable to True"""
+        state.timeout = True
+        return state
+
+    # endregion
+
+    # region local state properties
+    @staticmethod
+    def view_valid(state: NState, msg: GiskardMessage):
+        """A message has a valid view with respect to a local state when it is equal to the
+        local state's current view. Nodes only process "non-expired" messages sent in its current view."""
+        return state.node_view == msg.view
+
+    # endregion
+
+    # region byzantine behaviour
+    """ The primary form of Byzantine behavior Giskard considers is double voting:
+    sending two PrepareVote messages for two different blocks of the same height within the same view.
+    We call two messages equivocating if they evidence double voting behavior of their sender."""
+    @staticmethod
+    def equivocating_messages(state: NState, msg1: GiskardMessage, msg2: GiskardMessage):
+        return msg1 in state.out_messages \
+            and msg2 in state.out_messages \
+            and msg1.view == msg2.view \
+            and msg1.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and msg2.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and msg1.block != msg2.block \
+            and msg1.block.block_num == msg2.block.block_num
+
+    @staticmethod
+    def exists_same_height_block_old(state: NState, b: GiskardBlock):
+        """Duplicate block checking for either:
+        - a PrepareVote message in the processed message buffer for a different block of the same height, or
+        - a PrepareVote or PrepareQC message in the sent message buffer for a different block of the same height."""
+        msg: GiskardMessage
+        for msg in state.counting_messages:
+            if msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+                    and b.block_num == msg.block_num \
+                    and b != msg.block:
+                return True
+        for msg in state.out_messages:
+            if (msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+                or msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC) \
+                    and b.block_num == msg.block_num \
+                    and b != msg.block:
+                return True
+        return False
+
+    @staticmethod
+    def exists_same_height_block(state: NState, b: GiskardBlock):
+        """Returns True if there is a block in the out_messages buffer with the same height"""
+        msg: GiskardBlock
+        for msg in state.out_messages:
+            if msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+                    and b.block_num == msg.block_num \
+                    and b != msg.block:
+                return True
+        return False
+
+    @staticmethod
+    def exists_same_height_PrepareBlock(state: NState, b: GiskardBlock):
+        msg: GiskardBlock
+        for msg in state.counting_messages:
+            if msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+                    and b.block_num == msg.block_num \
+                    and b != msg.block:
+                return True
+        return False
+
+    @staticmethod
+    def same_height_block_msg(b: GiskardBlock, msg: GiskardMessage):
+        return msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and b.block_num == msg.block_num \
+            and b != msg.block
+
+    # endregion
+
+    # region prepare stage definitions
+    """Blocks in Giskard go through three stages: Prepare, Precommit and Commit.
+    The local definitions of these three stages are: 
+    - a block is in prepare stage in some local state s iff it has received quorum PrepareVote messages
+      or a PrepareQC message in the current view or some previous view, and
+    - a block is in precommit stage in some local state s iff its child block is in prepare stage in s, and
+    - a block is in commit stage in some local state s iff its child block is in precommit stage in s.
+    
+    We can parameterize the definition of a block being in prepare stage by some view."""
+
+    @staticmethod
+    def processed_PrepareVote_in_view_about_block(state: NState, view: int, b: GiskardBlock):
+        """Processed PrepareVote messages in some view about some block: """
+        return filter(lambda msg: msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE
+                                  and msg.block == b
+                                  and msg.view == view, state.counting_messages)
+
+    @staticmethod
+    def vote_quorum_in_view(state: NState, view: int, b: GiskardBlock):
+        return Giskard.quorum(Giskard.processed_PrepareVote_in_view_about_block(state, view, b))
     # endregion
 
     # region block methods
     @staticmethod
-    def generate_new_block(state: NState, block: GiskardBlock, block_index):  # TODO determine the block index via parent relation i guess via hash from parent
+    def generate_new_block(state: NState, block: GiskardBlock,
+                           block_index):  # TODO determine the block index via parent relation i guess via hash from parent
         """Generates a new giskard block
         TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
         return GiskardBlock(block, 0)
@@ -185,6 +313,7 @@ class Giskard:
     # region messages and quorum methods
     @staticmethod
     def message_with_higher_block(msg1: GiskardMessage, msg2: GiskardMessage):
+        """returns the given message with the higher block"""
         Giskard.higher_block(msg1.block, msg2.block)
 
     @staticmethod
@@ -232,7 +361,8 @@ class Giskard:
 
     @staticmethod
     def quorum(lm: list(GiskardMessage), peers: list(GiskardEngine)):
-        Giskard.has_at_least_two_thirds([msg.sender for msg in lm], peers)
+        """returns True if a sender from a list of messages has a quorum"""
+        return Giskard.has_at_least_two_thirds([msg.sender for msg in lm], peers)
 
     # Don't know if i even need this
     """@staticmethod
@@ -245,5 +375,6 @@ class Giskard:
 
     @staticmethod
     def quorum_growth(lm: list(GiskardMessage), msg: GiskardMessage, peers: list(GiskardEngine)):
+        """returns True if a quorum can be reached when a msg is added to a list of messages"""
         return Giskard.has_at_least_two_thirds([msg1.sender for msg1 in lm.append(msg)], peers)
     # endregion

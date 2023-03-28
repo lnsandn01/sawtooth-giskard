@@ -61,9 +61,11 @@ class GiskardEngine(Engine): # is a GiskardNode
         self.nstate = NState(self)# node identifier TODO get that from the registry service / the epoch protocol
 
     def honest_node(self):
+        """returns True if the node is honest"""
         return not self.dishonest
 
     def is_block_proposer(self):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+        """returns True if the node is a block proposer for the current view"""
         return True
 
     # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
@@ -99,6 +101,8 @@ class GiskardEngine(Engine): # is a GiskardNode
             and self._peers == other._peers
 
     def start(self, updates, service, startup_state):
+        """is called from main to start the Engine,
+         so it starts receiving messages"""
         self._service = service
         stream = Stream(self._component_endpoint)
         self._block_cache = _BlockCacheProxy(self._service, stream)
