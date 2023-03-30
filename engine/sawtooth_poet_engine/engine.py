@@ -13,20 +13,26 @@
 # limitations under the License.
 # -----------------------------------------------------------------------------
 
+import os
 import logging
 import queue
-
 import json
 from collections import namedtuple
 
-from messaging.stream import Stream
+import sawtooth_signing as signing
+from sawtooth_signing import CryptoFactory
+from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
+
+from sawtooth_sdk.messaging.stream import Stream
 from sawtooth_sdk.consensus.engine import Engine
 from sawtooth_sdk.consensus import exceptions
-from sawtooth_sdk.protobuf import Message
+from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, _BlockCacheProxy
 from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
-from sawtooth_poet_engine.giskard import Giskard, NState, GiskardMessage
+from sawtooth_poet_engine.giskard_message import GiskardMessage
+from sawtooth_poet_engine.giskard_nstate import NState
+from sawtooth_poet_engine.giskard import Giskard, GiskardMessage
 from sawtooth_poet_engine.pending import PendingForks
 
 
@@ -43,7 +49,9 @@ class GiskardEngine(Engine): # is a GiskardNode
         self._path_config = path_config
         self._component_endpoint = component_endpoint
         self._service = None
-        self._block_cache
+        self._block_cache = None
+        self._signer = self._load_identity_signer(self._path_config.key_dir, 'validator')
+        self.validator_id = self._signer.get_public_key().as_hex()
 
         # mostly still poet state variables
         self._exit = False
@@ -152,6 +160,44 @@ class GiskardEngine(Engine): # is a GiskardNode
             except Exception:  # pylint: disable=broad-except
                 LOGGER.exception("Unhandled exception in message loop")
 
+    @staticmethod
+    def _load_identity_signer(key_dir, key_name):
+        """Loads a private key from the key directory, based on a validator's
+        identity.
+
+        Args:
+            key_dir (str): The path to the key directory.
+            key_name (str): The name of the key to load.
+
+        Returns:
+            Signer: the cryptographic signer for the key
+        """
+        key_path = os.path.join(key_dir, '{}.priv'.format(key_name))
+
+        if not os.path.exists(key_path):
+            raise Exception(
+                "No such signing key file: {}".format(key_path))
+        if not os.access(key_path, os.R_OK):
+            raise Exception(
+                "Key file is not readable: {}".format(key_path))
+
+        LOGGER.info('Loading signing key: %s', key_path)
+        try:
+            with open(key_path, 'r') as key_file:
+                private_key_str = key_file.read().strip()
+        except IOError as e:
+            raise Exception(
+                "Could not load key file: {}".format(str(e))) from e
+
+        try:
+            private_key = Secp256k1PrivateKey.from_hex(private_key_str)
+        except signing.ParseError as e:
+            raise Exception(
+                "Invalid key in file {}: {}".format(key_path, str(e))) from e
+
+        context = signing.create_context('secp256k1')
+        crypto_factory = CryptoFactory(context)
+        return crypto_factory.new_signer(private_key)
 
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):
@@ -412,3 +458,4 @@ class PoetEngine(Engine):
         self._committing = False
 
         self._process_pending_forks()
+

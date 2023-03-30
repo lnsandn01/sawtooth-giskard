@@ -17,7 +17,6 @@ import logging
 import os
 from collections import namedtuple
 
-import oracle
 import sawtooth_signing as signing
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
@@ -47,45 +46,6 @@ from sawtooth_poet.poet_consensus import utils
 
 
 LOGGER = logging.getLogger(__name__)
-
-class GiskardOracle:
-    '''This is a wrapper around the Giskard structures (Proposer,
-    validator) and their attendant proxies.
-    '''
-    def __init__(self, service, component_endpoint,#TODO check those parameters
-                 config_dir, data_dir, key_dir, dishonest, peers):
-        self._config_dir = config_dir
-        self._data_dir = data_dir
-        self._signer = _load_identity_signer(key_dir, 'validator')
-        self._validator_id = self._signer.get_public_key().as_hex()
-
-        stream = Stream(component_endpoint)
-
-        self._block_cache = _BlockCacheProxy(service, stream)
-        self._state_view_factory = _StateViewFactoryProxy(service)
-
-        self._batch_publisher = _BatchPublisherProxy(stream, self._signer)
-        self._publisher = None
-
-
-
-
-    def __eq__(self, other):
-        if not isinstance(other, GiskardOracle):
-            # don't attempt to compare against unrelated types
-            return NotImplemented
-
-        return self._config_dir == other._config_dir \
-            and self._data_dir == other._data_dir \
-            and self._signer == other._signer \
-            and self._validator_id == other._validator_id \
-            and self._block_cache == other._block_cache \
-            and self._state_view_factory == other._state_view_factory \
-            and self._batch_publisher == other._batch_publisher \
-            and self._publisher == other._publisher \
-            and self._dishonest == other._dishonest \
-            and self._k_nodes == other._k_nodes
-
 
 class PoetOracle:
     '''This is a wrapper around the PoET structures (publisher,

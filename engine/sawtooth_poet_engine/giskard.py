@@ -1,52 +1,11 @@
 from collections import namedtuple
+from typing import List
 
-from engine import GiskardEngine
-from giskard_block import GiskardBlock
-from poet_consensus import utils
-from sawtooth_sdk.protobuf import Message
-
-
-class NState:
-    """State the Giskard node is in"""
-
-    def __init__(self, node: GiskardEngine):
-        self.node_view = 0
-        self.node_id = node.validator_id
-        self.in_messages = []
-        self.counting_messages = []
-        self.out_messages = []
-        self.timeout = False
-
-    def __eq__(self, other):
-        if not isinstance(other, NState):
-            return NotImplemented
-        return self.node_view == other.node_view \
-            and self.node_id == other.node_id \
-            and self.in_messages == other.in_messages \
-            and self.counting_messages == other.counting_messages \
-            and self.out_messages == other.out_messages \
-            and self.timeout == other.timeout
-
-
-class GiskardMessage:
-    """All Giskard messages have at least those fields"""
-
-    def __init__(self, message_type, view, sender, block, piggyback_block):
-        self.message_type = message_type
-        self.view = view
-        self.sender = sender
-        self.block = block
-        self.piggyback_block = piggyback_block
-
-    def __eq__(self, other):
-        # TODO check if sender should be node instead of just address
-        if not isinstance(other, GiskardMessage):
-            return NotImplemented
-        return self.message_type == other.message_type \
-            and self.view == other.view \
-            and self.sender == other.sender \
-            and self.block == other.block \
-            and self.piggyback_block == other.piggyback_block
+from sawtooth_poet_engine.giskard_block import GiskardBlock
+from sawtooth_poet_engine.giskard_message import GiskardMessage
+from sawtooth_poet_engine.giskard_nstate import NState
+from sawtooth_poet.poet_consensus import utils
+from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 
 class Giskard:
@@ -71,7 +30,7 @@ class Giskard:
         return state
 
     @staticmethod
-    def record_plural(state: NState, lm: list(GiskardMessage)):
+    def record_plural(state: NState, lm: List[GiskardMessage]):
         """Adds several messages to the out_message buffer"""
         state.out_messages.extend(lm)
         return state
@@ -84,7 +43,7 @@ class Giskard:
         return state
 
     @staticmethod
-    def add_plural(state: NState, lm: list(GiskardMessage)):
+    def add_plural(state: NState, lm: List[GiskardMessage]):
         """Adds several messages to the in_messages buffer"""
         state.in_messages.extend(lm)
         return state
@@ -317,29 +276,29 @@ class Giskard:
         Giskard.higher_block(msg1.block, msg2.block)
 
     @staticmethod
-    def has_at_least_two_thirds(nodes: list(GiskardEngine), peers: list(GiskardEngine)):
+    def has_at_least_two_thirds(nodes, peers):
         """Check if the given nodes are a two third majority in the current view"""
         matches = [node for node in nodes if node in peers]
         return len(matches) / len(peers) >= 2 / 3
 
     @staticmethod
-    def has_at_least_one_third(nodes: list(GiskardEngine), peers: list(GiskardEngine)):
+    def has_at_least_one_third(nodes, peers):
         """Check if the given nodes are at least a third of the peers in the current view"""
         matches = [node for node in nodes if node in peers]
         return len(matches) / len(peers) >= 1 / 3
 
     @staticmethod
-    def majority_growth(nodes: list(GiskardEngine), node: GiskardEngine, peers: list(GiskardEngine)):
+    def majority_growth(nodes, node, peers):
         """is a two third majority reached when this node is added?"""
         return Giskard.has_at_least_two_thirds(nodes.append(node), peers)
 
     @staticmethod
-    def majority_shrink(nodes: list(GiskardEngine), node: GiskardEngine, peers: list(GiskardEngine)):
+    def majority_shrink(nodes, node, peers):
         """if the given node is removed from nodes, is the two third majority lost?"""
         return not Giskard.has_at_least_two_thirds(nodes.remove(node), peers)
 
     @staticmethod
-    def intersection_property(state: NState, nodes1: list(GiskardEngine), nodes2: list(GiskardEngine)):
+    def intersection_property(state: NState, nodes1, nodes2):
         """Don't know if actually needed;
         Checks if the intersection between two lists of nodes, is at least one third of the peers"""
         if Giskard.has_at_least_two_thirds(state, nodes1) \
@@ -349,18 +308,18 @@ class Giskard:
         return False
 
     @staticmethod
-    def is_member(node: GiskardEngine, nodes: list(GiskardEngine)):
+    def is_member(node, nodes):
         """checks if a node is actually in a list of nodes"""
         return node in nodes
 
     @staticmethod
-    def evil_participants_no_majority(peers: list(GiskardEngine)):
+    def evil_participants_no_majority(peers):
         """Returns True if there is no majority of dishonest nodes
         TODO make peers of type GiskardNode"""
         return not Giskard.has_at_least_one_third(filter(lambda peer: not GiskardEngine.honest_node(peer), peers))
 
     @staticmethod
-    def quorum(lm: list(GiskardMessage), peers: list(GiskardEngine)):
+    def quorum(lm: List[GiskardMessage], peers):
         """returns True if a sender from a list of messages has a quorum"""
         return Giskard.has_at_least_two_thirds([msg.sender for msg in lm], peers)
 
@@ -374,7 +333,7 @@ class Giskard:
         return False"""
 
     @staticmethod
-    def quorum_growth(lm: list(GiskardMessage), msg: GiskardMessage, peers: list(GiskardEngine)):
+    def quorum_growth(lm: List[GiskardMessage], msg: GiskardMessage, peers):
         """returns True if a quorum can be reached when a msg is added to a list of messages"""
         return Giskard.has_at_least_two_thirds([msg1.sender for msg1 in lm.append(msg)], peers)
     # endregion

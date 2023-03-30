@@ -1,4 +1,4 @@
-from journal.block_wrapper import NULL_BLOCK_IDENTIFIER
+from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER
 
 
 class GiskardBlock:
