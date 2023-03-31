@@ -58,7 +58,7 @@ class GiskardEngine(Engine): # is a GiskardNode
         self._published = False
         self._building = False
         self._committing = False
-        self._dishonest = False
+        self.dishonest = False
         if dishonest == "dishonest":
             self.dishonest = True
         self._validating_blocks = set()
@@ -68,15 +68,6 @@ class GiskardEngine(Engine): # is a GiskardNode
         # original NState from the formal specification
         self.nstate = NState(self)# node identifier TODO get that from the registry service / the epoch protocol
 
-    def honest_node(self):
-        """returns True if the node is honest"""
-        return not self.dishonest
-
-    def is_block_proposer(self):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
-        """returns True if the node is a block proposer for the current view"""
-        return True
-
-    # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
 
     # Ignore invalid override pylint issues
     # pylint: disable=invalid-overridden-method
@@ -104,7 +95,7 @@ class GiskardEngine(Engine): # is a GiskardNode
             and self._published == other._published \
             and self._building == other._building \
             and self._commiting == other._commiting \
-            and self._dishonest == other._dishonest \
+            and self.dishonest == other.dishonest \
             and self._validating_blocks == other._validating_blocks \
             and self._peers == other._peers
 

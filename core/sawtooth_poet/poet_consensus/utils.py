@@ -34,16 +34,6 @@ def block_id_is_genesis(block_id):
     """
     return block_id == NULL_BLOCK_IDENTIFIER
 
-def b_last(b):
-    """Determines if the block index is the last block in the current view
-
-    Args:
-        block
-    Returns:
-        True if the block's index is 3
-    """
-    return b.block_index == LAST_BLOCK_INDEX_IDENTIFIER
-
 #def block_eq_dec(b1, b2) if equal go left if unequal go right
 
 #def parent_of(b1, b2):
