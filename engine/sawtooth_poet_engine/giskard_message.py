@@ -1,3 +1,4 @@
+
 class GiskardMessage:
     """All Giskard messages have at least those fields"""
 

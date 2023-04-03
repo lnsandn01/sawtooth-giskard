@@ -2,6 +2,8 @@ from collections import namedtuple
 from functools import reduce
 from typing import List
 
+from integration_tools import Block
+from oracle import _BlockCacheProxy
 from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
@@ -18,8 +20,7 @@ class Giskard:
         """returns True if the node is honest"""
         return not node.dishonest
 
-    def is_block_proposer(
-            node):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+    def is_block_proposer(node):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
         """returns True if the node is a block proposer for the current view"""
         return True
 
@@ -80,7 +81,7 @@ class Giskard:
     def increment_view(state: NState) -> NState:
         """View change happened,
         increments the view number, resets in_messages buffer and timeout variable."""
-        ++state.node_view
+        state.node_view += 1
         state.in_messages = []
         state.timeout = False
         return state
@@ -258,16 +259,7 @@ class Giskard:
                                        and msg.view == view, state.counting_messages))
 
     @staticmethod
-    def processed_ViewChange_in_view_correct(state: NState, view: int, msg: GiskardMessage):
-        """Test for processed_ViewChange_in_view"""
-        if msg in Giskard.processed_ViewChange_in_view(state, view):
-            return msg in state.counting_messages \
-                and msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE \
-                and msg.view == view
-        return False
-
-    @staticmethod
-    def view_change_quorum_in_view(state: NState, view: int, peers):
+    def view_change_quorum_in_view(state: NState, view: int, peers) -> bool:
         """Returns True if there is a quorum of ViewChange messages for the given view"""
         return Giskard.quorum(Giskard.processed_ViewChange_in_view(state, view), peers)
 
@@ -304,11 +296,16 @@ class Giskard:
 
     # region block methods
     @staticmethod
-    def generate_new_block(state: NState, block: GiskardBlock,
-                           block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
+    def generate_new_block(block: GiskardBlock, block_cache, block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
         """Generates a new giskard block
         TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
-        return GiskardBlock(block, 0)
+        new_block = Block(block.block_id + 1,
+                          block.block_id,
+                          block.signer_id,
+                          block.block_num + 1,
+                          block.payload,
+                          block.summary)
+        return GiskardBlock(new_block, block_index)
 
     @staticmethod
     def b_last(b: GiskardBlock):
@@ -316,89 +313,35 @@ class Giskard:
         return b.block_index == LAST_BLOCK_INDEX_IDENTIFIER
 
     @staticmethod
-    def generate_last_block(state: NState, block: GiskardBlock) -> GiskardBlock:
+    def generate_last_block(block: GiskardBlock, block_cache) -> GiskardBlock:
         """TODO still have to figure out if this should be a function or a test"""
-        return Giskard.generate_new_block(state, block, 3)
+        return Giskard.generate_new_block(block, block_cache, 3)
 
     @staticmethod
-    def about_generate_last_block(state: NState, block: GiskardBlock) -> bool:
+    def about_generate_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
         """Test if the next block to generate would be the last block"""
-        return Giskard.generate_last_block(state, block).block_height == block.block_height + 1 and Giskard.b_last(
-            Giskard.generate_last_block(state, block))
+        return Giskard.generate_last_block(block, block_cache).block_height == block.block_height + 1 and Giskard.b_last(
+            Giskard.generate_last_block(block, block_cache))
 
     @staticmethod
-    def about_non_last_block(state: NState, block: GiskardBlock) -> bool:
+    def about_non_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
         """Test if the next to be generated block will be the last"""
-        return not Giskard.b_last(Giskard.generate_new_block(state, block))
+        return not Giskard.b_last(Giskard.generate_new_block(block, block_cache, block_index))
 
     @staticmethod
-    def about_generate_new_block(state: NState, block: GiskardBlock) -> bool:
-        """ Lemma: proofs that all heights are correct;
-        GiskardBlock.b_height(Giskard.generate_new_block(bock)) == GiskardBlock.b_height(block) + 1"""
-        return Giskard.parent_block_height(state, block.block_num) and Giskard.generate_new_block_parent(state, block)
-
-    @staticmethod
-    def parent_of(state: NState, block: GiskardBlock) -> GiskardBlock:
+    def parent_of(block: GiskardBlock, block_cache) -> GiskardBlock:
         """tries to get the parent block from the store
+        :param block_cache:
         :param block:
         :return: GiskardBlock, or None
         """
-        return state._block_cache.block_store.get_child_block(
+        return block_cache.block_store.get_parent_block(
             block)  # check in Store if there is a block with height -1 and the previous id
 
     @staticmethod
-    def parent_ofb(state: NState, block: GiskardBlock, parent: GiskardBlock) -> bool:
+    def parent_ofb(block: GiskardBlock, parent: GiskardBlock, block_cache) -> bool:
         """Test if parent block relation works with blocks in storage"""
-        return Giskard.parent_of(state, block) == parent
-
-    @staticmethod
-    def parent_ofb_correct(state: NState, depth) -> bool:
-        """
-        Test if parent relation correct for all blocks in storage
-        :param depth: of the chain until testing is stopped
-        :return True if all parents are correct, False if one is not:
-        """
-        (i, child_block) = (0, None)
-        for block in state._block_cache.block_store.get_block_iter(reverse=True):
-            if i == depth:
-                return True
-            if i == 0:
-                child_block = block
-                continue
-            else:
-                if Giskard.parent_of(state, child_block) != block:
-                    return False
-                else:
-                    i += 1
-                    child_block = block
-        return True
-
-    @staticmethod
-    def parent_block_height(state: NState, depth) -> bool:
-        """Test if all parent blocks in storage have correct heights
-        :param depth: of the chain until testing is stopped
-        :return True if all parents' heights are correct, False if one is not:
-        """
-        (i, child_block) = (0, None)
-        for block in state._block_cache.block_store.get_block_iter(reverse=True):
-            if i == depth:
-                return True
-            if i == 0:
-                child_block = block
-                continue
-            else:
-                if not Giskard.parent_of(state, child_block).block_num + 1 == child_block.block_num:
-                    return False
-                else:
-                    i += 1
-                    child_block = block
-        return True
-
-    @staticmethod
-    def generate_new_block_parent(state: NState, block: GiskardBlock) -> bool:
-        """Test if parent block realtion works with generation of new block"""
-        return Giskard.parent_of(Giskard.generate_new_block(state, block)) == block
-
+        return Giskard.parent_of(block, block_cache) == parent
     @staticmethod
     def higher_block(b1: GiskardBlock, b2: GiskardBlock) -> GiskardBlock:
         return b1 if (b1.block_num > b2.block_num) else b2

@@ -25,9 +25,23 @@ from urllib.error import URLError
 from http.client import RemoteDisconnected
 import requests
 
+from consensus.exceptions import UnknownBlock, SameAsPreviousBlockAndNotGenesis
+from giskard_block import GiskardBlock
+from journal.block_wrapper import NULL_BLOCK_IDENTIFIER
+
 LOGGER = logging.getLogger(__name__)
 
 WAIT = 300
+
+
+class Block:
+    def __init__(self, block_id, previous_id, signer_id, block_num, payload, summary):
+        self.block_id = block_id
+        self.previous_id = previous_id
+        self.signer_id = signer_id
+        self.block_num = block_num
+        self.payload = payload
+        self.summary = summary
 
 
 class RestClient:
@@ -232,3 +246,87 @@ class SetSawtoothHome:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         del os.environ['SAWTOOTH_HOME']
+
+
+class BlockCacheMock:
+    def __init__(self, blocks: list):
+        self.block_store = BlockStoreMock(blocks)
+
+
+class BlockStoreMock:
+    def __init__(self, blocks: list):
+        self.blocks = blocks
+
+    @property
+    def chain_head(self):
+        return GiskardBlock(self.get_chain_head())
+
+    def get_chain_head(self):
+        return self.blocks[-1]
+
+    def get_blocks(self, block_ids: list):
+        blocks = [block for block in self.blocks if block_ids.__contains__(block.block_id)]
+        return {
+            block.block_id: block
+            for block in blocks
+        }
+
+    def get_block(self, block_id):
+        for block in self.blocks:
+            if block.block_id == block_id:
+                return block
+        return None
+
+    def get_block_iter(self):
+        chain_head = self.chain_head
+
+        yield chain_head
+
+        curr = chain_head
+
+        while curr.previous_id:
+            try:
+                previous_block = GiskardBlock(
+                    self.get_blocks(
+                        [curr.previous_id]
+                    )[curr.previous_id])
+            except UnknownBlock:
+                return
+
+            try:
+                if curr.previous_id == curr.block_id and curr.block_id != NULL_BLOCK_IDENTIFIER:
+                    raise SameAsPreviousBlockAndNotGenesis
+            except SameAsPreviousBlockAndNotGenesis:
+                raise
+
+            yield previous_block
+
+            curr = previous_block
+
+    def get_parent_block(self, child_block):
+        """
+        returns the parent block, if there is one in storage
+        :param child_block:
+        :return: GiskardBlock(parent_block) or None
+        """
+        for block in reversed(self.blocks):
+            if child_block.previous_id == block.block_id \
+                    and child_block.block_num - 1 == block.block_num:
+                return GiskardBlock(block)
+            if block.block_num < child_block.block_num:
+                return None
+        return None
+
+    def get_child_block(self, parent_block):
+        """
+        returns the child block, if there is one in storage
+        :param parent_block:
+        :return: GiskardBlock(parent_block) or None
+        """
+        for block in reversed(self.blocks):
+            if parent_block.block_id == block.previous_id \
+                    and parent_block.block_num + 1 == block.block_num:
+                return GiskardBlock(block)
+            if block.block_num < parent_block.block_num:
+                return None
+        return None

@@ -15,10 +15,10 @@
 from enum import Enum
 import logging
 
-try:
-    from sawtooth_sdk.protobuf.block_pb2 import BlockHeader
-except TypeError:
-    from sawtooth_validator.protobuf.block_pb2 import BlockHeader
+#try:
+from sawtooth_sdk.protobuf.block_pb2 import BlockHeader
+#except TypeError:
+#    from sawtooth_validator.protobuf.block_pb2 import BlockHeader
 
 NULL_BLOCK_IDENTIFIER = "0000000000000000"
 LAST_BLOCK_INDEX_IDENTIFIER = 3

@@ -2,7 +2,7 @@ from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER
 
 
 class GiskardBlock:
-    def __init__(self, block, block_index):
+    def __init__(self, block, block_index=0):
         # fields that come with consensus blocks
         self.block_id = block.block_id # hash of the block -> corresponds to giskard b_h
         self.previous_id = block.previous_id # hash of the previous block

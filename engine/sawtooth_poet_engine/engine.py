@@ -32,7 +32,7 @@ from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, _BlockCacheProxy
 from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
-from sawtooth_poet_engine.giskard import Giskard, GiskardMessage
+from sawtooth_poet_engine.giskard import Giskard
 from sawtooth_poet_engine.pending import PendingForks
 
 

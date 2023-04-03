@@ -18,10 +18,11 @@ import os
 from collections import namedtuple
 
 import sawtooth_signing as signing
+from giskard_block import GiskardBlock
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
 
-from sawtooth_sdk.consensus.exceptions import UnknownBlock
+from sawtooth_sdk.consensus.exceptions import UnknownBlock, SameAsPreviousBlockAndNotGenesis
 from sawtooth_sdk.messaging.stream import Stream
 from sawtooth_sdk.protobuf.batch_pb2 import Batch
 from sawtooth_sdk.protobuf.batch_pb2 import BatchHeader
@@ -257,21 +258,41 @@ class _BlockStoreProxy:
             except UnknownBlock:
                 return
 
+            try:
+                if curr.previous_id == curr.block_id and curr.block_id != NULL_BLOCK_IDENTIFIER:
+                    raise
+            except SameAsPreviousBlockAndNotGenesis:
+                return
+
             yield previous_block
 
             curr = previous_block
 
     def get_parent_block(self, child_block):
         """
-        returns the child block, if there is one in storage
+        returns the parent block, if there is one in storage
         :param child_block:
         :return: GiskardBlock(parent_block) or None
         """
-        for block in self.get_block_iter(reverse=True):
+        for block in self.get_block_iter():
             if child_block.previous_id == block.block_id \
-                    and child_block.block_num - 1 == block.block_num:
+                    and child_block.block_num + 1 == block.block_num:
                 return GiskardBlock(block)
-            if block.block_num >= child_block.block_num:
+            if block.block_num <= child_block.block_num:
+                return None
+        return None
+
+    def get_child_block(self, parent_block):
+        """
+        returns the child block, if there is one in storage
+        :param parent_block:
+        :return: GiskardBlock(parent_block) or None
+        """
+        for block in self.get_block_iter():
+            if parent_block.block_id == block.previous_id \
+                    and parent_block.block_num - 1 == block.block_num:
+                return GiskardBlock(block)
+            if block.block_num <= parent_block.block_num:
                 return None
         return None
 
