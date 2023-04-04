@@ -14,7 +14,7 @@ LOGGER.setLevel(logging.INFO)
 
 
 class TestGiskardUnit(unittest.TestCase):
-    def test_processed_ViewChange_in_view_correct(self):
+    def test_processed_ViewChange_in_view(self):
         """Test for processed_ViewChange_in_view"""
         state = NState(0, 0, [], [
             GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE,
@@ -107,3 +107,14 @@ class TestGiskardUnit(unittest.TestCase):
         """Test if parent block realtion works with generation of new block"""
         return Giskard.parent_of(block, block_cache) == block_parent
 
+    """Lemma make_PrepareBlocks_message_type :
+          forall s msg0 msg, 
+          In msg (make_PrepareBlocks s msg0) ->
+          get_message_type msg = PrepareBlock"""
+
+    """Lemma pending_PrepareVote_correct :
+          forall s msg0 msg,
+            In msg (pending_PrepareVote s msg0) ->
+            get_message_type msg = PrepareVote /\
+            get_sender msg = node_id s /\
+            get_view msg = node_view s."""

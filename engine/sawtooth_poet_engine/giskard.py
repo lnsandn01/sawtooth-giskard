@@ -20,7 +20,8 @@ class Giskard:
         """returns True if the node is honest"""
         return not node.dishonest
 
-    def is_block_proposer(node):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+    def is_block_proposer(
+            node):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
         """returns True if the node is a block proposer for the current view"""
         return True
 
@@ -292,11 +293,141 @@ class Giskard:
                            if Giskard.prepare_stage_in_view(state, view, msg.block)],
                           Giskard.highest_prepare_block_in_view(state, view - 1))
 
+    @staticmethod
+    def highest_prepare_block_message(state: NState) -> GiskardMessage:
+        """The following definition constructs the ViewChange message to be
+        sent by each participating node upon a timeout."""
+        return GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                              state.node_view,
+                              state.node_id,
+                              Giskard.highest_prepare_block_in_view(state, state.node_view),
+                              GiskardGenesisBlock)
+
+    # endregion
+
+    # region message construction
+    """In Giskard, some message types "carry" other messages: 
+    - PrepareBlock messages for the first block in a view carry the PrepareQC
+      message of its parent block, PrepareBlock messages for non-first blocks
+      carry the PrepareQC of the parent block of the first block, and
+    - PrepareVote messages carry the PrepareQC message of its parent block, and
+    - ViewChange messages carry the PrepareQC message of the highest local
+      prepare stage block.
+      
+    We do not model this at the type level (i.e., by having inductive message
+    type definitions), but rather simulate this behavior using pre- and post-conditions
+    in our local transitions. For example, a node only processes a PrepareBlock message
+    in the in message buffer if the PrepareQC message that is "piggybacked" onto has also
+    been received, and the transition effectively processes both of these messages in one step.
+    
+    PrepareBlocks are computed from either: 
+    - the final PrepareVote/PrepareQC message of the previous round, or 
+    - the ViewChangeQC from the previous round. 
+    
+    The messages in both of these cases contain the parent block for the newly proposed blocks.
+    Note that because blocks are proposed in sequence, only the first PrepareBlock message carries
+    the parent block's PrepareQC message - the remaining blocks cannot do so because their parent
+    blocks have not reached prepare stage yet, and therefore their PrepareQC messages cannot exist.
+    Therefore, all PrepareBlock messages in a view carry the same PrepareQC message: that of
+    the first block's parent."""
+
+    @staticmethod
+    def make_PrepareBlocks(state: NState, previous_msg: GiskardMessage, block_cache) -> List[GiskardMessage]:
+        """Note that although all PrepareBlock messages are produced and sent together in one
+        single transition, this does not mean that:
+        - they are processed at the same time, and
+        - we falsely enforce the discipline that the second proposed block contains the first
+          block's PrepareQC when in fact it has not reached PrepareQC."""
+        block1 = Giskard.generate_new_block(previous_msg.block, block_cache, 1)
+        block2 = Giskard.generate_new_block(block1, block_cache, 2)
+        block3 = Giskard.generate_last_block(block1, block_cache)  # labeled as last block in view
+        return [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                               state.node_view,
+                               state.node_id,
+                               block1,
+                               previous_msg.block),  # PrepareQC of the highest block from previous round
+                GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                               state.node_view,
+                               state.node_id,
+                               block2,
+                               previous_msg.block),  # PrepareQC of the highest block from previous round
+                GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                               state.node_view,
+                               state.node_id,
+                               block3,
+                               previous_msg.block)]  # PrepareQC of the highest block from previous round
+
+    @staticmethod
+    def make_PrepareVote(state: NState, quorum_msg: GiskardMessage,
+                         prepareblock_msg: GiskardMessage) -> GiskardMessage:
+        """A <<PrepareVote>> carries the <<PrepareQC>> of its parent, and can only be sent
+        after parent block reaches prepare stage, which means one of its inputs must be
+        either a <<PrepareVote>> or <<PrepareQC>>.
+
+        <<PrepareVote>>s are also computed from <<PrepareBlock>> messages,
+        which means another one of its inputs must be a <<PrepareBlock>> message."""
+        return GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,  # message type
+                              state.node_view,  # view number
+                              state.node_id,
+                              prepareblock_msg.block,  # block to vote for
+                              quorum_msg.block)
+
+    @staticmethod
+    def pending_PrepareVote(state: NState, quorum_msg: GiskardMessage, block_cache) -> List[GiskardMessage]:
+        """Nodes create <<PrepareVote>> messages upon receiving <<PrepareBlock>> messages
+        for each block, and "wait" to send it until the parent block reaches prepare stage.
+        This is modeled by constructing <<PrepareVote>> messages on-demand given that:
+        - the parent block has just reached prepare stage, and
+        - a <<PrepareBlock>> message exists for the child block.
+
+        Constructing pending PrepareVote messages for child messages with existing PrepareBlocks."""
+        return list(map(lambda prepare_block_msg:
+                        Giskard.make_PrepareVote(state, quorum_msg, prepare_block_msg),
+                        filter(lambda msg: msg.view == quorum_msg.view
+                                           and not Giskard.exists_same_height_block(state, msg.block)
+                                           and Giskard.parent_ofb(msg.block, quorum_msg.block, block_cache)
+                                           and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                               state.counting_messages)))
+
+    @staticmethod
+    def make_PrepareQC(state: NState, msg: GiskardMessage) -> GiskardMessage:
+        """PrepareQC messages carry nothing, and can only be sent after a quorum number of PrepareVotes,
+        which means its only input is a PrepareVote containing the relevant block."""
+        return GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,  # message type
+                              state.node_view,  # view number
+                              state.node_id,
+                              msg.block,
+                              GiskardGenesisBlock)
+
+    @staticmethod
+    def make_ViewChange(state: NState) -> GiskardMessage:
+        """ViewChange messages carry the <<PrepareQC>> message of the highest block to
+        reach prepare stage, and since they are triggered by timeouts, no input
+        message is required."""
+        return GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE,
+                              state.node_view,
+                              state.node_id,
+                              Giskard.highest_prepare_block_in_view(state, state.node_view),
+                              GiskardGenesisBlock)
+
+    @staticmethod
+    def make_ViewChangeQC(state: NState, highest_msg: GiskardMessage) -> GiskardMessage:
+        """Upon receiving quorum <<ViewChange>> messages, the block proposer for the new
+        view aggregates the max height block from all the <<ViewChange>> messages and
+        sends a <<ViewChangeQC>> containing this block, alongside a <<PrepareQC>> message
+        evidencing its prepare stage."""
+        return GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE_QC,
+                              state.node_view,
+                              state.node_id,
+                              highest_msg.block,
+                              GiskardGenesisBlock)
+
     # endregion
 
     # region block methods
     @staticmethod
-    def generate_new_block(block: GiskardBlock, block_cache, block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
+    def generate_new_block(block: GiskardBlock, block_cache,
+                           block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
         """Generates a new giskard block
         TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
         new_block = Block(block.block_id + 1,
@@ -320,7 +451,8 @@ class Giskard:
     @staticmethod
     def about_generate_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
         """Test if the next block to generate would be the last block"""
-        return Giskard.generate_last_block(block, block_cache).block_height == block.block_height + 1 and Giskard.b_last(
+        return Giskard.generate_last_block(block,
+                                           block_cache).block_height == block.block_height + 1 and Giskard.b_last(
             Giskard.generate_last_block(block, block_cache))
 
     @staticmethod
@@ -342,6 +474,7 @@ class Giskard:
     def parent_ofb(block: GiskardBlock, parent: GiskardBlock, block_cache) -> bool:
         """Test if parent block relation works with blocks in storage"""
         return Giskard.parent_of(block, block_cache) == parent
+
     @staticmethod
     def higher_block(b1: GiskardBlock, b2: GiskardBlock) -> GiskardBlock:
         return b1 if (b1.block_num > b2.block_num) else b2
