@@ -34,16 +34,6 @@ LOGGER = logging.getLogger(__name__)
 WAIT = 300
 
 
-class Block:
-    def __init__(self, block_id, previous_id, signer_id, block_num, payload, summary):
-        self.block_id = block_id
-        self.previous_id = previous_id
-        self.signer_id = signer_id
-        self.block_num = block_num
-        self.payload = payload
-        self.summary = summary
-
-
 class RestClient:
     def __init__(self, url, namespace=None):
         self.url = url

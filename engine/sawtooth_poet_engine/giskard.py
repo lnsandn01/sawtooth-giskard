@@ -1,10 +1,10 @@
+import functools
 from collections import namedtuple
 from functools import reduce
 from typing import List
 
-from integration_tools import Block
 from oracle import _BlockCacheProxy
-from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
+from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
 from sawtooth_sdk.protobuf.validator_pb2 import Message
@@ -16,16 +16,145 @@ class Giskard:
         gets called by GiskardEngine for incoming messages"""
 
     # region node methods
+    @staticmethod
     def honest_node(node):
         """returns True if the node is honest"""
         return not node.dishonest
 
+    @staticmethod
     def is_block_proposer(
-            node):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+            node, view=0):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
         """returns True if the node is a block proposer for the current view"""
         return True
 
     # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
+    # endregion
+
+    # region block methods
+    @staticmethod
+    def generate_new_block(block: GiskardBlock, block_cache,
+                           block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
+        """Generates a new giskard block
+        TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
+        new_block = Block(block.block_id + 1,
+                          block.block_id,
+                          block.signer_id,
+                          block.block_num + 1,
+                          block.payload,
+                          block.summary)
+        return GiskardBlock(new_block, block_index)
+
+    @staticmethod
+    def b_last(b: GiskardBlock):
+        """Returns True if the block index is the last block in the current view 3"""
+        return b.block_index == LAST_BLOCK_INDEX_IDENTIFIER
+
+    @staticmethod
+    def generate_last_block(block: GiskardBlock, block_cache) -> GiskardBlock:
+        """TODO still have to figure out if this should be a function or a test"""
+        return Giskard.generate_new_block(block, block_cache, 3)
+
+    @staticmethod
+    def about_generate_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
+        """Test if the next block to generate would be the last block"""
+        return Giskard.generate_last_block(block,
+                                           block_cache).block_height == block.block_height + 1 and Giskard.b_last(
+            Giskard.generate_last_block(block, block_cache))
+
+    @staticmethod
+    def about_non_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
+        """Test if the next to be generated block will be the last"""
+        return not Giskard.b_last(Giskard.generate_new_block(block, block_cache, block_index))
+
+    @staticmethod
+    def parent_of(block: GiskardBlock, block_cache) -> GiskardBlock:
+        """tries to get the parent block from the store
+        :param block_cache:
+        :param block:
+        :return: GiskardBlock, or None
+        """
+        return block_cache.block_store.get_parent_block(
+            block)  # check in Store if there is a block with height -1 and the previous id
+
+    @staticmethod
+    def parent_ofb(block: GiskardBlock, parent: GiskardBlock, block_cache) -> bool:
+        """Test if parent block relation works with blocks in storage"""
+        return Giskard.parent_of(block, block_cache) == parent
+
+    @staticmethod
+    def higher_block(b1: GiskardBlock, b2: GiskardBlock) -> GiskardBlock:
+        return b1 if (b1.block_num > b2.block_num) else b2
+
+    # endregion
+
+    # region messages and quorum methods
+    @staticmethod
+    def message_with_higher_block(msg1: GiskardMessage, msg2: GiskardMessage) -> GiskardMessage:
+        """returns the given message with the higher block"""
+        Giskard.higher_block(msg1.block, msg2.block)
+
+    @staticmethod
+    def has_at_least_two_thirds(nodes, peers) -> bool:
+        """Check if the given nodes are a two third majority in the current view"""
+        matches = [node for node in nodes if node in peers]
+        return len(matches) / len(peers) >= 2 / 3
+
+    @staticmethod
+    def has_at_least_one_third(nodes, peers) -> bool:
+        """Check if the given nodes are at least a third of the peers in the current view"""
+        matches = [node for node in nodes if node in peers]
+        return len(matches) / len(peers) >= 1 / 3
+
+    @staticmethod
+    def majority_growth(nodes, node, peers) -> bool:
+        """is a two third majority reached when this node is added?"""
+        return Giskard.has_at_least_two_thirds(nodes.append(node), peers)
+
+    @staticmethod
+    def majority_shrink(nodes, node, peers) -> bool:
+        """if the given node is removed from nodes, is the two third majority lost?"""
+        return not Giskard.has_at_least_two_thirds(nodes.remove(node), peers)
+
+    @staticmethod
+    def intersection_property(nodes1, nodes2, peers) -> bool:
+        """Don't know if actually needed;
+        Checks if the intersection between two lists of nodes, is at least one third of the peers"""
+        if Giskard.has_at_least_two_thirds(nodes1, peers) \
+                and Giskard.has_at_least_two_thirds(nodes2, peers):
+            matches = [value for value in nodes1 if value in nodes2]
+            return Giskard.has_at_least_one_third(matches, peers)
+        return False
+
+    @staticmethod
+    def is_member(node, nodes) -> bool:
+        """checks if a node is actually in a list of nodes"""
+        return node in nodes
+
+    @staticmethod
+    def evil_participants_no_majority(peers) -> bool:
+        """Returns True if there is no majority of dishonest nodes
+        TODO make peers of type GiskardNode"""
+        return not Giskard.has_at_least_one_third(list(filter(lambda peer: peer.dishonest, peers)))
+
+    @staticmethod
+    def quorum(lm: List[GiskardMessage], peers) -> bool:
+        """returns True if a sender from a list of messages has a quorum"""
+        return Giskard.has_at_least_two_thirds([msg.sender for msg in lm], peers)
+
+    # Don't know if i even need this
+    """@staticmethod
+        def quorum_subset(self, lm1, lm2):
+        if self.quorum(lm1) \
+                and self.quorum(lm2):
+            matches = [value for value in  if value in nodes2]
+            return self.has_at_least_one_third(matches)
+        return False"""
+
+    @staticmethod
+    def quorum_growth(lm: List[GiskardMessage], msg: GiskardMessage, peers) -> bool:
+        """returns True if a quorum can be reached when a msg is added to a list of messages"""
+        return Giskard.has_at_least_two_thirds([msg1.sender for msg1 in lm.append(msg)], peers)
+
     # endregion
 
     # region local state operations
@@ -269,7 +398,7 @@ class Giskard:
         """Maximum height block from all processed ViewChange messages in view"""
         return reduce(lambda x, y: x if x.block_num > y.block_num else y,
                       [msg.block for msg in Giskard.processed_ViewChange_in_view(state, view)],
-                      GiskardGenesisBlock)
+                      GiskardGenesisBlock())
 
     @staticmethod
     def highest_ViewChange_block_height_in_view(state: NState, view: int) -> int:
@@ -286,7 +415,7 @@ class Giskard:
         the definition of <<highest_prepare_block_in_view>> must be able to recursively
         search for the highest prepare block in all past views"""
         if view == 0:
-            return GiskardGenesisBlock
+            return GiskardGenesisBlock()
         else:
             return reduce(lambda x, y: x if x.height > y.height else y,
                           [msg.block for msg in state.counting_messages
@@ -301,7 +430,7 @@ class Giskard:
                               state.node_view,
                               state.node_id,
                               Giskard.highest_prepare_block_in_view(state, state.node_view),
-                              GiskardGenesisBlock)
+                              GiskardGenesisBlock())
 
     # endregion
 
@@ -397,7 +526,7 @@ class Giskard:
                               state.node_view,  # view number
                               state.node_id,
                               msg.block,
-                              GiskardGenesisBlock)
+                              GiskardGenesisBlock())
 
     @staticmethod
     def make_ViewChange(state: NState) -> GiskardMessage:
@@ -408,7 +537,7 @@ class Giskard:
                               state.node_view,
                               state.node_id,
                               Giskard.highest_prepare_block_in_view(state, state.node_view),
-                              GiskardGenesisBlock)
+                              GiskardGenesisBlock())
 
     @staticmethod
     def make_ViewChangeQC(state: NState, highest_msg: GiskardMessage) -> GiskardMessage:
@@ -420,132 +549,403 @@ class Giskard:
                               state.node_view,
                               state.node_id,
                               highest_msg.block,
-                              GiskardGenesisBlock)
+                              GiskardGenesisBlock())
 
     # endregion
 
-    # region block methods
-    @staticmethod
-    def generate_new_block(block: GiskardBlock, block_cache,
-                           block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
-        """Generates a new giskard block
-        TODO block as input is the parent block -> have to get the new child block from the handler in engine"""
-        new_block = Block(block.block_id + 1,
-                          block.block_id,
-                          block.signer_id,
-                          block.block_num + 1,
-                          block.payload,
-                          block.summary)
-        return GiskardBlock(new_block, block_index)
+    # region local state transitions
+    """Nodes are responsible for processing messages and updating their local state;
+    broadcasting outgoing messages is handled by the network.
+    
+    In the following section, Giskard local state transitions are organized
+    according to the type of message being processed."""
+
+    """Message type-agnostic actions"""
+
+    """Block proposal-related definitions"""
 
     @staticmethod
-    def b_last(b: GiskardBlock):
-        """Returns True if the block index is the last block in the current view 3"""
-        return b.block_index == LAST_BLOCK_INDEX_IDENTIFIER
+    def GenesisBlock_message(
+            state: NState) -> GiskardMessage:  # Todo check with sawtooth genesis / call when genesis has been received / when generated with giskard consensus (later)
+        return GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE_QC,
+                              0,
+                              state.node_id,
+                              GiskardGenesisBlock(),
+                              GiskardGenesisBlock())
 
     @staticmethod
-    def generate_last_block(block: GiskardBlock, block_cache) -> GiskardBlock:
-        """TODO still have to figure out if this should be a function or a test"""
-        return Giskard.generate_new_block(block, block_cache, 3)
+    def propose_block_init(state: NState, msg: GiskardMessage,
+                           state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """Returns True when a node transitioned to proposing blocks"""
+        return state_prime == \
+            Giskard.record_plural(state, Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state))) \
+            and lm == Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state)) \
+            and state == NState(state.node_id) \
+            and Giskard.honest_node(node) \
+            and Giskard.is_block_proposer(node) \
+            and not state.timeout
 
     @staticmethod
-    def about_generate_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
-        """Test if the next block to generate would be the last block"""
-        return Giskard.generate_last_block(block,
-                                           block_cache).block_height == block.block_height + 1 and Giskard.b_last(
-            Giskard.generate_last_block(block, block_cache))
+    def propose_block_init_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        """Actually does the transition to propose blocks"""
+        lm = Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state))
+        state_prime = Giskard.record_plural(
+            state, Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state)))
+        return [state_prime, lm]
 
     @staticmethod
-    def about_non_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
-        """Test if the next to be generated block will be the last"""
-        return not Giskard.b_last(Giskard.generate_new_block(block, block_cache, block_index))
+    def process_timeout(state: NState, msg: GiskardMessage,
+                        state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """ When the timeout happens, nodes enter a liminal phase where they are only allowed
+        to process the following kinds of messages:
+        - ViewChange from other nodes
+        - ViewChangeQC
+        - PrepareQC
+
+        Upon timeout, nodes send a ViewChange message containing the highest block to reach
+        Prepare stage in its current view, and the PrepareQC message attesting to that block's Prepare stage.
+
+        It does not increment the view yet"""
+        return state_prime == \
+            Giskard.record_plural(state, [Giskard.make_ViewChange(state,
+                                                                  Giskard.highest_prepare_block_message(state))]) \
+            and lm == [Giskard.make_ViewChange(state), Giskard.highest_prepare_block_message(state)] \
+            and Giskard.honest_node(node) \
+            and state.timeout
 
     @staticmethod
-    def parent_of(block: GiskardBlock, block_cache) -> GiskardBlock:
-        """tries to get the parent block from the store
-        :param block_cache:
-        :param block:
-        :return: GiskardBlock, or None
-        """
-        return block_cache.block_store.get_parent_block(
-            block)  # check in Store if there is a block with height -1 and the previous id
+    def process_timeout_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        lm = [Giskard.make_ViewChange(state), Giskard.highest_prepare_block_message(state)]
+        state_prime = Giskard.record_plural(
+            state, [Giskard.make_ViewChange(state, Giskard.highest_prepare_block_message(state))])
+        return [state_prime, lm]
 
     @staticmethod
-    def parent_ofb(block: GiskardBlock, parent: GiskardBlock, block_cache) -> bool:
-        """Test if parent block relation works with blocks in storage"""
-        return Giskard.parent_of(block, block_cache) == parent
+    def discard_view_invalid(state: NState, msg: GiskardMessage,
+                             state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """An expired message - discard and do not process."""
+        return state_prime == Giskard.discard(state, msg) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and not Giskard.view_valid(state, msg)
 
     @staticmethod
-    def higher_block(b1: GiskardBlock, b2: GiskardBlock) -> GiskardBlock:
-        return b1 if (b1.block_num > b2.block_num) else b2
+    def discard_view_invalid_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        state_prime = Giskard.discard(state, msg)
+        return [state_prime, []]
 
-    # endregion
-
-    # region messages and quorum methods
-    @staticmethod
-    def message_with_higher_block(msg1: GiskardMessage, msg2: GiskardMessage) -> GiskardMessage:
-        """returns the given message with the higher block"""
-        Giskard.higher_block(msg1.block, msg2.block)
+    """PrepareBlock message-related actions"""
 
     @staticmethod
-    def has_at_least_two_thirds(nodes, peers) -> bool:
-        """Check if the given nodes are a two third majority in the current view"""
-        matches = [node for node in nodes if node in peers]
-        return len(matches) / len(peers) >= 2 / 3
+    def process_PrepareBlock_duplicate(state: NState, msg: GiskardMessage,
+                                       state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """If a same height block has been seen - discard the message."""
+        return state_prime == Giskard.discard(state, msg) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and Giskard.exists_same_height_PrepareBlock(state, msg.block)
 
     @staticmethod
-    def has_at_least_one_third(nodes, peers) -> bool:
-        """Check if the given nodes are at least a third of the peers in the current view"""
-        matches = [node for node in nodes if node in peers]
-        return len(matches) / len(peers) >= 1 / 3
+    def process_PrepareBlock_duplicate_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        state_prime = Giskard.discard(state, msg)
+        return [state_prime, []]
 
     @staticmethod
-    def majority_growth(nodes, node, peers) -> bool:
-        """is a two third majority reached when this node is added?"""
-        return Giskard.has_at_least_two_thirds(nodes.append(node), peers)
+    def process_PrepareBlock_pending_vote(state: NState, msg: GiskardMessage,
+                                          state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
+        """Parent block has not reached Prepare - "add its PrepareVote to pending buffer" by simply
+        processing the PrepareBlock message and waiting for parent block to reach quorum."""
+        return state_prime == Giskard.process(state, msg) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and not Giskard.exists_same_height_PrepareBlock(state, msg.block) \
+            and not Giskard.prepare_stage(state, Giskard.parent_of(msg.block, block_cache))
 
     @staticmethod
-    def majority_shrink(nodes, node, peers) -> bool:
-        """if the given node is removed from nodes, is the two third majority lost?"""
-        return not Giskard.has_at_least_two_thirds(nodes.remove(node), peers)
+    def process_PrepareBlock_pending_vote_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        state_prime = Giskard.process(state, msg)
+        return [state_prime, []]
 
     @staticmethod
-    def intersection_property(nodes1, nodes2, peers) -> bool:
-        """Don't know if actually needed;
-        Checks if the intersection between two lists of nodes, is at least one third of the peers"""
-        if Giskard.has_at_least_two_thirds(nodes1, peers) \
-                and Giskard.has_at_least_two_thirds(nodes2, peers):
-            matches = [value for value in nodes1 if value in nodes2]
-            return Giskard.has_at_least_one_third(matches, peers)
-        return False
+    def process_PrepareBlock_vote(state: NState, msg: GiskardMessage,
+                                  state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
+        """Parent block has reached QC - send PrepareVote for the block in that message and record in out buffer"""
+        return state_prime == \
+            Giskard.record_plural(Giskard.process(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache)) \
+            and lm == Giskard.pending_PrepareVote(state, msg, block_cache) \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and Giskard.prepare_stage(state, Giskard.parent_of(msg.block, block_cache))
 
     @staticmethod
-    def is_member(node, nodes) -> bool:
-        """checks if a node is actually in a list of nodes"""
-        return node in nodes
+    def process_PrepareBlock_vote_set(state: NState, msg: GiskardMessage,
+                                      block_cache) -> [NState, List[GiskardMessage]]:
+        lm = Giskard.pending_PrepareVote(state, msg, block_cache)
+        state_prime = Giskard.record_plural(
+            Giskard.process(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache))
+        return [state_prime, lm]
+
+    """PrepareVote message-related actions"""
 
     @staticmethod
-    def evil_participants_no_majority(peers) -> bool:
-        """Returns True if there is no majority of dishonest nodes
-        TODO make peers of type GiskardNode"""
-        return not Giskard.has_at_least_one_third(list(filter(lambda peer: peer.dishonest, peers)))
+    def process_PrepareVote_wait(state: NState, msg: GiskardMessage,
+                                 state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
+        """Block has not reached prepare stage - wait to send PrepareVote messages for child"""
+        return state_prime == Giskard.process(state, msg) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and not Giskard.prepare_stage(Giskard.process(state, msg), msg.block, block_cache)
 
     @staticmethod
-    def quorum(lm: List[GiskardMessage], peers) -> bool:
-        """returns True if a sender from a list of messages has a quorum"""
-        return Giskard.has_at_least_two_thirds([msg.sender for msg in lm], peers)
-
-    # Don't know if i even need this
-    """@staticmethod
-        def quorum_subset(self, lm1, lm2):
-        if self.quorum(lm1) \
-                and self.quorum(lm2):
-            matches = [value for value in  if value in nodes2]
-            return self.has_at_least_one_third(matches)
-        return False"""
+    def process_PrepareVote_wait_set(state: NState, msg: GiskardMessage,
+                                     block_cache) -> [NState, List[GiskardMessage]]:
+        state_prime = Giskard.process(state, msg)
+        return [state_prime, []]
 
     @staticmethod
-    def quorum_growth(lm: List[GiskardMessage], msg: GiskardMessage, peers) -> bool:
-        """returns True if a quorum can be reached when a msg is added to a list of messages"""
-        return Giskard.has_at_least_two_thirds([msg1.sender for msg1 in lm.append(msg)], peers)
+    def process_PrepareVote_vote(state: NState, msg: GiskardMessage,
+                                 state_prime: NState, lm: List[GiskardMessage], node, block_cache, peers) -> bool:
+        """Block is about to reach QC - send PrepareVote messages for child block if it exists and send PrepareQC
+        vote_quorum means quorum PrepareVote messages"""
+        # TODO is checking in the out_messages enough with exists_same_height_block ?
+        return state_prime == \
+            Giskard.process(Giskard.record_plural(
+                state, [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg)]), msg) \
+            and lm == [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg)] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and not Giskard.exists_same_height_block(state, msg.block) \
+            and Giskard.vote_quorum_in_view(Giskard.process(state, msg), msg.view, msg.block, peers)
+
+    @staticmethod
+    def process_PrepareVote_vote_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        lm = [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg)]
+        state_prime = Giskard.process(Giskard.record_plural(
+            state, [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg)]), msg)
+        return [state_prime, lm]
+
+    """PrepareQC message-related actions"""
+
+    """PrepareQC messages are considered equivalent to a quorum of PrepareVote messages. 
+    PrepareQC messages can be processed after timeout, so we do not require that timeout
+    has not occurred.
+    
+    The PrepareQC message suffices to directly quorum a block, even if it has not received
+    enough PrepareVote messages.
+    
+    Last block in view for to-be block proposer undergoing normal view change process:
+    - increment view, and
+    - propose block at height <<(S n)>>"""
+
+    @staticmethod
+    def process_PrepareQC_last_block_new_proposer(state: NState, msg: GiskardMessage,
+                                                  state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """Increment the view, propose next block"""
+        return state_prime == \
+            Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
+                                  Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)) \
+            and lm == Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg) \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC \
+            and Giskard.view_valid(state, msg) \
+            and Giskard.last_block(msg.block) \
+            and Giskard.is_block_proposer(node, state.node_view + 1)
+
+    @staticmethod
+    def process_PrepareQC_last_block_new_proposer_set(state: NState, msg: GiskardMessage) -> [NState,
+                                                                                              List[GiskardMessage]]:
+        lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
+        state_prime = Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
+                                            Giskard.make_PrepareBlocks(
+                                                Giskard.increment_view(Giskard.process(state, msg)), msg))
+        return [state_prime, lm]
+
+    @staticmethod
+    def process_PrepareQC_last_block(state: NState, msg: GiskardMessage,
+                                     state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """Last block in the view for to-be validator - increment view
+        No child blocks can exist, so we don't need to send anything"""
+        return state_prime == Giskard.increment_view(Giskard.process(state, msg)) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC \
+            and Giskard.view_valid(state, msg) \
+            and Giskard.last_block(msg.block) \
+            and not Giskard.is_block_proposer(node, state.node_view + 1)
+
+    @staticmethod
+    def process_PrepareQC_last_block_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        state_prime = Giskard.increment_view(Giskard.process(state, msg))
+        return [state_prime, []]
+
+    @staticmethod
+    def process_PrepareQC_non_last_block(state: NState, msg: GiskardMessage,
+                                         state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+        """Not-the-last block in the view - send PrepareVote messages for child block and wait"""
+        return state_prime == Giskard.process(Giskard.record_plural(state, Giskard.pending_PrepareVote(state, msg)),
+                                              msg) \
+            and lm == Giskard.pending_PrepareVote(state, msg) \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and Giskard.last_block(msg.block) \
+            and not Giskard.last_block(msg.block)
+
+    @staticmethod
+    def process_PrepareQC_non_last_block_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        lm = Giskard.pending_PrepareVote(state, msg)
+        state_prime = Giskard.process(Giskard.record_plural(state, Giskard.pending_PrepareVote(state, msg)), msg)
+        return [state_prime, lm]
+
+    """ViewChange message-related actions"""
+
+    """ViewChange messages can be processed after timeout, so we do not require that timeout has not occurred.
+    
+    Process ViewChange at quorum for to-be block proposer:
+    - send highest PrepareQC message,
+    - send ViewChangeQC message,
+    - increment view, and
+    - propose new block according to highest block in all quorum ViewChange messages."""
+
+    @staticmethod
+    def higher_message(msg1: GiskardMessage, msg2: GiskardMessage) -> GiskardMessage:
+        if msg1.block == Giskard.higher_block(msg1.block, msg2.block):
+            return msg1
+        else:
+            return msg2
+
+    @staticmethod
+    def highest_message_in_list(node, message_type, lm: List[GiskardMessage]) -> GiskardMessage:
+        return functools.reduce(lambda x, y: x if x == Giskard.higher_message(x, y) else y,
+                                lm, GiskardMessage(message_type, 0, node, GiskardGenesisBlock(), GiskardGenesisBlock()))
+
+    @staticmethod
+    def highest_ViewChange_message(state: NState) -> GiskardMessage:
+        return Giskard.highest_message_in_list(state.node_id,
+                                               Message.CONSENSUS_GISKARD_VIEW_CHANGE,
+                                               Giskard.processed_ViewChange_in_view(state, state.node_view))
+
+    @staticmethod
+    def get_view_highest_ViewChange_message_node_view(state: NState, msg: GiskardMessage) -> bool:
+        if msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE:
+            return msg.view == state.node_view \
+                and msg in state.counting_messages \
+                and Giskard.highest_ViewChange_message(state).view == state.node_view
+
+    @staticmethod
+    def get_view_highest_ViewChange_message_in_counting_messages(state: NState, msg: GiskardMessage) -> bool:
+        if msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE:
+            return msg.view == state.node_view \
+                and msg in state.counting_messages \
+                and Giskard.highest_ViewChange_message(state) in state.counting_messages
+
+    @staticmethod
+    def process_ViewChange_quorum_new_proposer(state: NState, msg: GiskardMessage,
+                                               state_prime: NState, lm: List[GiskardMessage],
+                                               node, block_cache) -> bool:
+        """For better understandability look at process_ViewChange_quorum_new_proposer_set"""
+        # Record new blocks after incrementing view
+        return state_prime == \
+            Giskard.record_plural(
+                Giskard.increment_view(
+                    Giskard.process(
+                        Giskard.process(state, msg),
+                        GiskardMessage(
+                            Message.CONSENSUS_GISKARD_PREPARE_QC,
+                            msg.view,
+                            msg.sender,
+                            Giskard.highest_ViewChange_message(
+                                Giskard.process(state, msg)).block,
+                            GiskardGenesisBlock()))),
+                # The input has to include the current ViewChange message, just in
+                #        case that is the one which contains the highest block
+                [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,  # PrepareQC of the highest block
+                                state.node_view,
+                                state.node_id,
+                                Giskard.highest_ViewChange_message(Giskard.process(state, msg)), GiskardGenesisBlock()),
+                 # ViewChangeQC containing the highest block
+                 Giskard.make_ViewChangeQC(state,
+                                           Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
+                 # New block proposals
+                 Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                            Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
+                                            block_cache)]) \
+            and lm == [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                                      # Send ViewChangeQC message before incrementing view to ensure the others can process it
+                                      state.node_view,
+                                      state.node_id,
+                                      Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
+                                      GiskardGenesisBlock()),
+                       Giskard.make_ViewChangeQC(state,
+                                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
+                       # send PrepareBlock messages
+                       Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                                  Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
+                                                  block_cache)] \
+            and Giskard.received(state, msg) \
+            and Giskard.received(state, GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                                                       # This condition is necessary given ViewChange sending behavior
+                                                       msg.view,
+                                                       msg.sender,
+                                                       Giskard.highest_ViewChange_message(
+                                                           Giskard.process(state, msg)).block,
+                                                       GiskardGenesisBlock())) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE \
+            and Giskard.view_valid(state, msg) \
+            and Giskard.view_change_quorum_in_view(Giskard.process(state, msg),
+                                                   # ViewChange messages can be processed during timeout.It is important that the parameter here is (process state msg) and not simply state
+                                                   state.node_view) \
+            and Giskard.is_block_proposer(node, state.node_view + 1)
+
+    @staticmethod
+    def process_ViewChange_quorum_new_proposer_set(state: NState,
+                                                   msg: GiskardMessage, block_cache) -> List[NState, List[GiskardMessage]]:
+        state_prime = Giskard.process(state, msg)
+        msg_vc = Giskard.highest_ViewChange_message(state_prime)
+        lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                                      # Send ViewChangeQC message before incrementing view to ensure the others can process it
+                                      state.node_view,
+                                      state.node_id,
+                                      msg_vc.block,
+                                      GiskardGenesisBlock()),
+              Giskard.make_ViewChangeQC(state, msg_vc),
+              Giskard.make_PrepareBlocks(Giskard.increment_view(state), msg_vc, block_cache)]
+        msg_pr = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                                      # Send ViewChangeQC message before incrementing view to ensure the others can process it
+                                      msg.view,
+                                      msg.sender,
+                                      msg_vc.block,
+                                      GiskardGenesisBlock())
+        state_prime_prime = NState(state_prime.node_view + 1,
+                                   state_prime.node_id,
+                                   [],
+                                   state_prime.counting_messages.append(msg_pr),
+                                   state_prime.out_messages.append(lm),
+                                   False)
+        return [state_prime_prime, lm]
+
     # endregion

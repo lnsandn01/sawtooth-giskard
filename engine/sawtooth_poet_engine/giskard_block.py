@@ -1,18 +1,30 @@
+from collections import namedtuple
+
 from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER
 
 
-class GiskardBlock:
+class Block:
+    def __init__(self, block_id, previous_id, signer_id, block_num, payload, summary):
+        self.block_id = block_id
+        self.previous_id = previous_id
+        self.signer_id = signer_id
+        self.block_num = block_num
+        self.payload = payload
+        self.summary = summary
+
+
+class GiskardBlock():
     def __init__(self, block, block_index=0):
         # fields that come with consensus blocks
-        self.block_id = block.block_id # hash of the block -> corresponds to giskard b_h
-        self.previous_id = block.previous_id # hash of the previous block
+        self.block_id = block.block_id  # hash of the block -> corresponds to giskard b_h
+        self.previous_id = block.previous_id  # hash of the previous block
         self.signer_id = block.signer_id
-        self.block_num = block.block_num # block height
+        self.block_num = block.block_num  # block height
         self.payload = block.payload
         self.summary = block.summary
 
         # fields that giskard requires
-        self.block_index = 0 # the block index in the current view
+        self.block_index = 0  # the block index in the current view
 
     def __eq__(self, other):
         return self.block_id == other.block_id \
@@ -44,13 +56,5 @@ class GiskardBlock:
 
 
 class GiskardGenesisBlock(GiskardBlock):
-    def __init__(self, block):
-        super().__init__(self, block)
-
-        # fields that come with consensus blocks
-        self.block_id = NULL_BLOCK_IDENTIFIER
-        self.previous_id = NULL_BLOCK_IDENTIFIER
-        self.block_num = 0
-
-        # fields that giskard requires
-        self.block_index = 0  # the block index in the current view
+    def __init__(self):
+        super().__init__(Block(NULL_BLOCK_IDENTIFIER, NULL_BLOCK_IDENTIFIER, 0, 0, "", ""), 0)
