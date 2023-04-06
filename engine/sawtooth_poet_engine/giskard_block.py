@@ -13,7 +13,7 @@ class Block:
         self.summary = summary
 
 
-class GiskardBlock():
+class GiskardBlock:
     def __init__(self, block, block_index=0):
         # fields that come with consensus blocks
         self.block_id = block.block_id  # hash of the block -> corresponds to giskard b_h

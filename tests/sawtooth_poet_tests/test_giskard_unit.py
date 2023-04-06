@@ -2,6 +2,8 @@ import unittest
 import logging
 from typing import List
 
+import giskard_state_transition_type
+from giskard_node import GiskardNode
 from integration_tools import BlockCacheMock
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER, LAST_BLOCK_INDEX_IDENTIFIER
@@ -176,3 +178,391 @@ class TestGiskardUnit(unittest.TestCase):
                                       ],
                            [], False)
         assert Giskard.highest_ViewChange_message(state).message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE
+
+    # region facts about local state transitions
+    def test_out_messages_local_monotonic(self, state1: NState = None, state2: NState = None,
+                                          msg: GiskardMessage = None, lm: List[GiskardMessage] = None, t=None,
+                                          node=None, block_cache=None, peers=None):
+        # TODO probably should write a test outside that calls this and test every transition
+        if not state1:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 proposer,
+                                 GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())
+            state1 = NState(1, node.node_id,
+                            [msg],
+                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you3,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you1,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                            1,
+                                            proposer,
+                                            GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you2,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock())
+                             ], [], False)
+            block_cache = BlockCacheMock([GiskardGenesisBlock()])
+            state2 = Giskard.process_PrepareVote_vote_set(state1, msg, block_cache)[0]
+            lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
+            peers = [node, proposer, you1, you2, you3]
+
+        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                       state1, msg, state2, lm, node, block_cache, peers):
+            for msg0 in state1.out_messages:
+                assert msg0 in state2.out_messages
+        else:
+            assert False, "state transition didn't work out"
+
+    def test_counting_messages_same_view_monotonic(self, state1: NState = None, state2: NState = None,
+                                                   msg: GiskardMessage = None, lm: List[GiskardMessage] = None, t=None,
+                                                   node=None, block_cache=None, peers=None):
+        # TODO probably should write a test outside that calls this and test every transition
+        if not state1:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 proposer,
+                                 GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())
+            state1 = NState(1, node.node_id,
+                            [msg],
+                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you3,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you1,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                            1,
+                                            proposer,
+                                            GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you2,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock())
+                             ], [], False)
+            block_cache = BlockCacheMock([GiskardGenesisBlock()])
+            state2 = Giskard.process_PrepareVote_vote_set(state1, msg, block_cache)[0]
+            lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
+            peers = [node, proposer, you1, you2, you3]
+
+        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                       state1, msg, state2, lm, node, block_cache, peers) \
+                and state1.node_view == state2.node_view:
+            for msg0 in state1.counting_messages:
+                assert msg0 in state2.counting_messages
+        else:
+            assert False, "state transition didn't work out"
+
+    def test_counting_messages_local_monotonic(self, state1: NState = None, state2: NState = None,
+                                               msg: GiskardMessage = None, lm: List[GiskardMessage] = None, t=None,
+                                               node=None, block_cache=None, peers=None):
+        # TODO probably should write a test outside that calls this and test every transition
+        if not state1:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 proposer,
+                                 GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())
+            state1 = NState(1, node.node_id,
+                            [msg],
+                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you3,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you1,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                            1,
+                                            proposer,
+                                            GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you2,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock())
+                             ], [], False)
+            block_cache = BlockCacheMock([GiskardGenesisBlock()])
+            state2 = Giskard.process_PrepareVote_vote_set(state1, msg, block_cache)[0]
+            lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
+            peers = [node, proposer, you1, you2, you3]
+
+        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                       state1, msg, state2, lm, node, block_cache, peers):
+            for msg0 in state1.counting_messages:
+                assert msg0 in state2.counting_messages
+        else:
+            assert False, "state transition didn't work out"
+
+    def test_about_local_out_messages(self, state1: NState = None, state2: NState = None,
+                                      msg: GiskardMessage = None, lm: List[GiskardMessage] = None, t=None,
+                                      node=None, block_cache=None, peers=None):
+        # TODO probably should write a test outside that calls this and test every transition
+        if not state1:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            peers = [node, proposer, you1, you2, you3]
+            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 proposer,
+                                 GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())
+            state1 = NState(1, node.node_id,
+                            [msg],
+                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you3,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you1,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                            1,
+                                            proposer,
+                                            GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock()),
+                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                            1,
+                                            you2,
+                                            GiskardBlock(
+                                                Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                            GiskardGenesisBlock())
+                             ], [], False)
+            block_cache = BlockCacheMock([GiskardGenesisBlock()])
+            state2 = Giskard.process_PrepareVote_vote_set(state1, msg, block_cache)[0]
+            lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
+
+        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                       state1, msg, state2, lm, node, block_cache, peers):
+            for msg0 in lm:
+                assert msg0 in state2.out_messages
+        else:
+            assert False, "state transition didn't work out"
+
+    def test_not_prepare_stage(self, state: NState = None, b: GiskardBlock = None):
+        if not state:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            peers = [node, proposer, you1, you2, you3]
+            b = GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1)
+            state = NState(1, node.node_id, [],
+                           [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock())
+                            ], [], False)
+
+        if not Giskard.prepare_stage(state, b, peers) \
+                and not Giskard.vote_quorum_in_view(state, state.node_view, b, peers):
+            for msg in state.counting_messages:
+                self.assertFalse(msg.block == b
+                                 and msg.view == state.node_view
+                                 and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC)
+        else:
+            assert False, "was in prepare stage, or vote quorum"
+
+    def test_prepare_stage_record_agnostic(self, state: NState = None, b: GiskardBlock = None,
+                                           msg: GiskardMessage = None):
+        if not state:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            peers = [node, proposer, you1]
+            b = GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1)
+            state = NState(1, node.node_id, [],
+                           [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           node,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock())
+                            ], [], False)
+            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 you1,
+                                 GiskardBlock(
+                                     Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())
+
+        if Giskard.prepare_stage(Giskard.record(state, msg), b, peers):
+            assert Giskard.prepare_stage(state, b, peers)
+        else:
+            assert False, "was not in prepare stage"
+
+    def test_prepare_stage_record_plural_agnostic(self, state: NState = None, b: GiskardBlock = None,
+                                                  lm: List[GiskardMessage] = None):
+        if not state:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            peers = [node, proposer, you1]
+            b = GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1)
+            state = NState(1, node.node_id, [],
+                           [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           node,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock())
+                            ], [], False)
+            lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 you1,
+                                 GiskardBlock(
+                                     Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock()),
+                  GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 proposer,
+                                 GiskardBlock(
+                                     Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())]
+
+        if Giskard.prepare_stage(Giskard.record_plural(state, lm), b, peers):
+            assert Giskard.prepare_stage(state, b, peers)
+        else:
+            assert False, "was not in prepare stage"
+
+    def test_prepare_stage_process_record_plural_agnostic(self, state: NState = None, b: GiskardBlock = None,
+                                                          lm: List[GiskardMessage] = None, msg: GiskardMessage = None):
+        if not state:
+            node = GiskardNode("me", 1, False)
+            proposer = GiskardNode("proposer", 1, False)
+            you1 = GiskardNode("you1", 1, False)
+            you2 = GiskardNode("you2", 1, False)
+            you3 = GiskardNode("you3", 1, False)
+            peers = [node, proposer, you1]
+            b = GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1)
+            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 you1,
+                                 GiskardBlock(
+                                     Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())
+            state = NState(1, node.node_id, [msg],
+                           [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           proposer,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock()),
+                            GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                           1,
+                                           node,
+                                           GiskardBlock(
+                                               Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                           GiskardGenesisBlock())
+                            ], [], False)
+            lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 you1,
+                                 GiskardBlock(
+                                     Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock()),
+                  GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                                 1,
+                                 proposer,
+                                 GiskardBlock(
+                                     Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
+                                 GiskardGenesisBlock())]
+
+        if Giskard.prepare_stage(Giskard.process(Giskard.record_plural(state, lm), msg), b, peers):
+            assert Giskard.prepare_stage(Giskard.process(state, msg), b, peers)
+        else:
+            assert False, "was not in prepare stage"
+    # endregion

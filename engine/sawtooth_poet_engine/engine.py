@@ -34,6 +34,7 @@ from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
 from sawtooth_poet_engine.giskard import Giskard
 from sawtooth_poet_engine.pending import PendingForks
+from sawtooth_poet_engine.giskard_node import GiskardNode
 
 
 LOGGER = logging.getLogger(__name__)
@@ -58,13 +59,14 @@ class GiskardEngine(Engine): # is a GiskardNode
         self._published = False
         self._building = False
         self._committing = False
-        self.dishonest = False
+        dishonest = False
         if dishonest == "dishonest":
-            self.dishonest = True
+            dishonest = True
         self._validating_blocks = set()
         self.peers = peers
         self.k_peers = len(peers)
 
+        self.node = GiskardNode(self.validator_id, 0, dishonest)
         # original NState from the formal specification
         self.nstate = NState(self)# node identifier TODO get that from the registry service / the epoch protocol
 

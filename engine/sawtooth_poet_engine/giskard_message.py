@@ -10,7 +10,6 @@ class GiskardMessage:
         self.piggyback_block = piggyback_block
 
     def __eq__(self, other):
-        # TODO check if sender should be node instead of just address
         if not isinstance(other, GiskardMessage):
             return NotImplemented
         return self.message_type == other.message_type \
