@@ -9,6 +9,8 @@ from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenes
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
 import giskard_state_transition_type
+from sawtooth_poet_engine.giskard_global_state import GState
+from sawtooth_poet_engine.giskard_global_trace import GTrace
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER, LAST_BLOCK_INDEX_IDENTIFIER
 
@@ -1076,19 +1078,27 @@ class Giskard:
     """ Protocol transition type definitions """
 
     @staticmethod
-    def get_transition_type(t, state: NState, msg: GiskardMessage,
-                            state_prime: NState, lm: List[GiskardMessage],
-                            node, block_cache, peers) -> bool:
+    def get_inputs_for_transition(t, state: NState, peers):
         match t:
             case giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
-                return Giskard.propose_block_init(state, msg, state_prime, lm, node)
+                msg, block_cache_mock = None
+                lm = Giskard.propose_block_init_set(state, msg)[1]
             case giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
-                return Giskard.discard_view_invalid(state, msg, state_prime, lm, node)
+                msg = state.in_messages[state.in_messages.count-1]
+                block_cache = None
+                lm = Giskard.discard_view_invalid_set(state, msg)[1]
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
-                return Giskard.process_PrepareBlock_duplicate(state, msg, state_prime, lm, node)
+                msg = state.in_messages[state.in_messages.count-1]
+                block_cache = None
+                lm = Giskard.process_PrepareBlock_duplicate_set(state, msg)[1]
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
+                msg = state.in_messages[state.in_messages.count-1]  # Todo check in what order the in messages are processed
+                block_cache = something
+                lm = Giskard.process_PrepareBlock_pending_vote_set(state, msg)
                 return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
+                if old_version:  # bug in the original Coq code, this is here for testing the impact
+                    return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
                 return Giskard.process_PrepareBlock_vote(state, msg, state_prime, lm, node, block_cache)
             case giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
                 return Giskard.process_PrepareVote_vote(state, msg, state_prime, lm, node, block_cache, peers)
@@ -1108,4 +1118,116 @@ class Giskard:
                 return Giskard.process_ViewChangeQC_single(state, msg, state_prime, lm, node)
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
                 return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache)
+
+        return [msg, lm, block_cache]
+
+    @staticmethod
+    def get_transition(t, state: NState, msg: GiskardMessage,
+                       state_prime: NState, lm: List[GiskardMessage],
+                       node, block_cache, peers, old_version=False) -> bool:
+        match t:
+            case giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
+                return Giskard.propose_block_init(state, msg, state_prime, lm, node)
+            case giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
+                return Giskard.discard_view_invalid(state, msg, state_prime, lm, node)
+            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
+                return Giskard.process_PrepareBlock_duplicate(state, msg, state_prime, lm, node)
+            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
+                return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
+            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
+                if old_version:  # bug in the original Coq code, this is here for testing the impact
+                    return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
+                return Giskard.process_PrepareBlock_vote(state, msg, state_prime, lm, node, block_cache)
+            case giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
+                return Giskard.process_PrepareVote_vote(state, msg, state_prime, lm, node, block_cache, peers)
+            case giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
+                return Giskard.process_PrepareVote_wait(state, msg, state_prime, lm, node, block_cache)
+            case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
+                return Giskard.process_PrepareQC_last_block_new_proposer(state, msg, state_prime, lm, node)
+            case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
+                return Giskard.process_PrepareQC_last_block(state, msg, state_prime, lm, node)
+            case giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
+                return Giskard.process_PrepareQC_non_last_block(state, msg, state_prime, lm, node, block_cache)
+            case giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
+                return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache, peers)
+            case giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
+                return Giskard.process_ViewChange_pre_quorum(state, msg, state_prime, lm, node, peers)
+            case giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
+                return Giskard.process_ViewChangeQC_single(state, msg, state_prime, lm, node)
+            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
+                return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache)
+    # endregion
+
+    # region global state
+    """ In order to define protocol-following global state transitions,
+    we first define an operation which does two things:
+    - broadcasts outgoing messages from the transitioning node to the remaining nodes, and
+    - records outgoing messages in the global message buffer.
+    
+    We adopt the convention that nodes do not send messages to themselves.
+    This design choice is orthogonal to safety proofs because we do not
+    reason about the number of participants required to reach a quorum. """
+
+    @staticmethod
+    def broadcast_messages(gstate: GState, state1: NState, state2: NState, lm: List[GiskardMessage], peers) -> GState:
+        return GState({node.key: state2 if node.key == state1.node_id else Giskard.add_plural(gstate.gstate[node.key], lm)
+            if node.key in peers else gstate.gstate[node.key] for node in gstate.gstate},
+            lm + gstate.broadcast_msgs)
+
+    @staticmethod
+    def GState_transition(gstate: GState, gstate_prime: GState, peers):
+        """ Protocol-following global state transitions are defined as a binary relation
+        on pre-state and post-state, in which one participating node makes a protocol-following
+        local state transition, and the network broadcasts and records its outgoing messages
+        to the other participating nodes. """
+        transition_correct = True
+        for node in peers:
+            for process in giskard_state_transition_type.all_transition_types:
+                if Giskard.get_transition(process, gstate[node.node_id]) \
+                        and gstate_prime == \
+                                Giskard.broadcast_messages(gstate, gstate.gstate[node.node_id],
+                                                           gstate_prime.gstate[node.node_id], lm):
+
+        if not transition_correct:
+            return gstate_prime == \
+                GState({node.key: Giskard.flip_timeout(gstate.gstate[node.key])
+                if Giskard.is_member(node.key, peers) else gstate.gstate[node.key] for node in gstate},
+                gstate.broadcast_msgs)
+    def GState_transition(g, g_):
+        for n in participants:
+            for pro
+            if get_transition(fst(g[n]))[0]:
+                process, msg, lm = get_transition(fst(g[n]))
+                g_ = broadcast_messages(g, n, process(fst(g[n]), msg), lm)
+                return True
+        g_ = ({n: flip_timeout(fst(g[n])) if is_member(n, participants) else fst(g[n]) for n in g},
+              snd(g))
+        return True
+    # endregion
+
+    # region safety property one: prepare stage height injectivity
+    """ Prepare stage height injectivity definition """
+
+    """ Recall that a block is in prepare stage in some local state if it has
+    received quorum PrepareVote messages or a PrepareQC message in the current
+    view or some previous view.
+    
+    The first safety property states that no two same height blocks can be
+    at prepare stage in the same view, i.e., prepare stage block height is injective
+    in the same view. The first safety property differs from the following two in that
+    it contains an additional premise restricting the view during which the two blocks
+    reached prepare stage. This is important because it is possible for multiple blocks
+    at the same height to reach prepare stage across different views in the case of
+    abnormal view changes.
+    
+    In any global state i in a valid protocol trace tr that begins with the initial
+    state and respects the protocol transition rules, if there are two participating
+    nodes n and m, and two blocks b1 b2, such that b1 and b2 have the same height,
+    and both reach prepare stage for n and m's local state respectively in some view p,
+    but are not equal, then we can prove a contradiction. """
+
+    @staticmethod
+    def prepare_stage_same_view_height_injective_statement(gtrace: GTrace):
+
+
     # endregion

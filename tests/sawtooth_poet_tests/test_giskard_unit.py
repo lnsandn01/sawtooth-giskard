@@ -226,8 +226,8 @@ class TestGiskardUnit(unittest.TestCase):
             lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
             peers = [node, proposer, you1, you2, you3]
 
-        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
-                                       state1, msg, state2, lm, node, block_cache, peers):
+        if Giskard.get_transition(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                  state1, msg, state2, lm, node, block_cache, peers):
             for msg0 in state1.out_messages:
                 assert msg0 in state2.out_messages
         else:
@@ -279,8 +279,8 @@ class TestGiskardUnit(unittest.TestCase):
             lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
             peers = [node, proposer, you1, you2, you3]
 
-        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
-                                       state1, msg, state2, lm, node, block_cache, peers) \
+        if Giskard.get_transition(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                  state1, msg, state2, lm, node, block_cache, peers) \
                 and state1.node_view == state2.node_view:
             for msg0 in state1.counting_messages:
                 assert msg0 in state2.counting_messages
@@ -333,8 +333,8 @@ class TestGiskardUnit(unittest.TestCase):
             lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
             peers = [node, proposer, you1, you2, you3]
 
-        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
-                                       state1, msg, state2, lm, node, block_cache, peers):
+        if Giskard.get_transition(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                  state1, msg, state2, lm, node, block_cache, peers):
             for msg0 in state1.counting_messages:
                 assert msg0 in state2.counting_messages
         else:
@@ -386,8 +386,8 @@ class TestGiskardUnit(unittest.TestCase):
             state2 = Giskard.process_PrepareVote_vote_set(state1, msg, block_cache)[0]
             lm = [Giskard.make_PrepareQC(state1, msg), Giskard.pending_PrepareVote(state1, msg, block_cache)]
 
-        if Giskard.get_transition_type(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
-                                       state1, msg, state2, lm, node, block_cache, peers):
+        if Giskard.get_transition(giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE,
+                                  state1, msg, state2, lm, node, block_cache, peers):
             for msg0 in lm:
                 assert msg0 in state2.out_messages
         else:

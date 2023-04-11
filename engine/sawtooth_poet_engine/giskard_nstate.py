@@ -3,7 +3,7 @@ class NState:
 
     def __init__(self, node):
         self.node_view = 0
-        self.node_id = node.validator_id
+        self.node_id = node.node_id
         self.in_messages = []
         self.counting_messages = []
         self.out_messages = []
