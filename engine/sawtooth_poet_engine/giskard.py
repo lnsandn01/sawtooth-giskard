@@ -1,5 +1,6 @@
 import copy
 import functools
+import itertools
 from collections import namedtuple
 from functools import reduce
 from typing import List
@@ -628,7 +629,8 @@ class Giskard:
         It does not increment the view yet """
         return state_prime == \
             Giskard.record_plural(state, [Giskard.make_ViewChange(state,
-                                                                  Giskard.highest_prepare_block_message(state, peers), peers)]) \
+                                                                  Giskard.highest_prepare_block_message(state, peers),
+                                                                  peers)]) \
             and lm == [Giskard.make_ViewChange(state, peers), Giskard.highest_prepare_block_message(state, peers)] \
             and Giskard.honest_node(node) \
             and state.timeout
@@ -1111,7 +1113,8 @@ class Giskard:
             case giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
                 return Giskard.process_PrepareQC_non_last_block(state, msg, state_prime, lm, node, block_cache)
             case giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
-                return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache, peers)
+                return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache,
+                                                                      peers)
             case giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
                 return Giskard.process_ViewChange_pre_quorum(state, msg, state_prime, lm, node, peers)
             case giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
@@ -1190,6 +1193,7 @@ class Giskard:
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
                 lm = Giskard.pending_PrepareVote(state, msg, block_cache)
         return [msg, block_cache, lm]
+
     # endregion
 
     # region global state
@@ -1204,7 +1208,8 @@ class Giskard:
 
     @staticmethod
     def broadcast_messages(gstate: GState, state1: NState, state2: NState, lm: List[GiskardMessage], peers) -> GState:
-        return GState({node.key: state2 if node.key == state1.node_id else Giskard.add_plural(gstate.gstate[node.key], lm)
+        return GState(
+            {node.key: state2 if node.key == state1.node_id else Giskard.add_plural(gstate.gstate[node.key], lm)
             if node.key in peers else gstate.gstate[node.key] for node in gstate.gstate},
             lm + gstate.broadcast_msgs)
 
@@ -1217,33 +1222,49 @@ class Giskard:
         transition_correct = True
         for node in peers:
             for process in giskard_state_transition_type.all_transition_types:
-                msg, block_cache, lm = Giskard.get_inputs_for_transition(process, gstate[node.node_id], peers, old_version)
+                msg, block_cache, lm = Giskard.get_inputs_for_transition(process, gstate[node.node_id], peers,
+                                                                         old_version)
                 if not (Giskard.get_transition(process, gstate[node.node_id]) \
                         and gstate_prime == \
-                                Giskard.broadcast_messages(gstate, gstate.gstate[node.node_id],
-                                                           gstate_prime.gstate[node.node_id], lm)):
+                        Giskard.broadcast_messages(gstate, gstate.gstate[node.node_id],
+                                                   gstate_prime.gstate[node.node_id], lm)):
                     transition_correct = False
         if not transition_correct:
             return gstate_prime == \
                 GState({node.key: Giskard.flip_timeout(gstate.gstate[node.key])
                 if Giskard.is_member(node.key, peers) else gstate.gstate[node.key] for node in gstate.gstate},
-                gstate.broadcast_msgs)
+                       gstate.broadcast_msgs)
         else:
             return True
+
     # endregion
 
     # region global state trace
     @staticmethod
     def protocol_trace(gtrace: GTrace, nodes, old_version=False) -> bool:
-        for i in range(0,gtrace.count-1):
+        for i in range(0, gtrace.count - 1):
             if i == 0:
                 if not gtrace[0] == GState(nodes):
                     return False
-            if i < gtrace.count-1:
+            if i < gtrace.count - 1:
                 tmp_state = gtrace[i]
-                if not Giskard.GState_transition(tmp_state, gtrace[i+1, nodes, old_version]):
+                if not Giskard.GState_transition(tmp_state, gtrace[i + 1, nodes, old_version]):
                     return False
         return True
+
+    @staticmethod
+    def PrepareVote_about_block_in_view_global(gtrace: GTrace, i: int,
+                                               block: GiskardBlock, view: int) -> List[GiskardMessage]:
+        """ Returns all broadcasted PrepareVote msgs for a block in the given view. """
+        return list(filter(lambda msg: msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE
+                                       and msg.block == block
+                                       and msg.view == view, gtrace[i][1]))
+
+    @staticmethod
+    def vote_quorum_in_view_global(gtrace: GTrace, i: int, block: GiskardBlock, view: int, peers) -> bool:
+        """ Returns True if there is a quorum for the global PrepareVote messages. """
+        return Giskard.quorum(Giskard.PrepareVote_about_block_in_view_global(gtrace, i, block, view), peers)
+
     # endregion
 
     # region safety property one: prepare stage height injectivity
@@ -1267,5 +1288,86 @@ class Giskard:
     and both reach prepare stage for n and m's local state respectively in some view p,
     but are not equal, then we can prove a contradiction. """
 
-    def vote_quorum_in_view_global
+    """ TODO check if the three @staticmethod
+    def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
+        for gtrace in gtraces:
+            for i in range(0, gtrace.count - 1):
+                gstate = gtrace[i].gstate
+                nodes = list(gstate.keys())
+                view = gstate[nodes[0]].node_view
+                for v in range(1, view):  # TODO is there a view 0 except for the genesis block?
+                    for n in range(0, nodes.count - 1):
+                        if n < nodes.count - 1:  # we are comparing two different nodes, are there not more are we done
+                            node1 = nodes[n]
+                            node2 = nodes[n + 1]
+                            blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
+                            blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
+                            for block1 in blocks1:
+                                for block2 in blocks2:
+                                    if node1 in peers \
+                                            and node2 in peers \
+                                            and block1 != block2 \
+                                            and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1) \
+                                            and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2) \
+                                            and block1.block_num == block2.block_num:  # same block height
+                                        return False
+        return True """
+
+    """ TODO check if the three return the same thing @staticmethod
+    def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
+        for gtrace in gtraces:
+            for i in range(0, gtrace.count - 1):
+                gstate = gtrace[i].gstate
+                nodes = set(gstate.keys())
+                view = gstate[nodes.pop()].node_view
+                for v in range(1, view):  # TODO is there a view 0 except for the genesis block?
+                    while nodes:
+                        node1 = nodes.pop()
+                        blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
+                        for node2 in nodes:
+                            blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers)
+                            for block1 in blocks1:
+                                for block2 in blocks2:
+                                    if node1 in peers \
+                                            and node2 in peers \
+                                            and block1 != block2 \
+                                            and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1) \
+                                            and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2) \
+                                            and block1.block_num == block2.block_num:  # same block height
+                                        return False
+        return True """
+
+    @staticmethod
+    def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
+        for gtrace in gtraces:
+            for i in range(0, gtrace.count - 1):
+                gstate = gtrace[i].gstate
+                nodes = set(gstate.keys())
+                for node1, node2 in itertools.product(nodes, nodes):
+                    if node1 == node2:
+                        continue
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers)
+                    view = min(gstate[node1][0].node_view, gstate[node2][0].node_view)
+                    for v, block1, block2 in itertools.product(range(1, view), blocks1, blocks2):  # Todo check if views start with 0 or 1
+                        if node1 in peers \
+                                and node2 in peers \
+                                and block1 != block2 \
+                                and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1) \
+                                and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2) \
+                                and block1.block_num == block2.block_num:  # blocks are different but same block height
+                            return False
+        return True
+
+    """ Intuitively, the proof of this property follows directly from the definition of
+    non-Byzantine/honest voting behavior: honest nodes cannot vote for two conflicting
+    blocks during the same view. If two conflicting blocks reach prepare stage in the
+    same view, then two quorums of at least 2/3 validators voted for each block.
+    By the pigeonhole principle, there must exist a set of at least 1/3 validators who
+    voted for both conflicting blocks and are therefore Byzantine/dishonest. By assumption,
+    there are no more than 1/3 Byzantine/dishonest blocks. Therefore, we reach a contradiction. """
+
+    """ TODO Reducing the proof? """
+
+
     # endregion
