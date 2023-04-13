@@ -67,7 +67,7 @@ class GiskardEngine(Engine): # is a GiskardNode
 
         self.node = GiskardNode(self.validator_id, 0, dishonest)
         # original NState from the formal specification
-        self.nstate = NState(self)# node identifier TODO get that from the registry service / the epoch protocol
+        self.nstate = NState(self, self.node)# node identifier TODO get that from the registry service / the epoch protocol
 
 
     # Ignore invalid override pylint issues

@@ -227,7 +227,7 @@ class Giskard:
     def increment_view(state: NState) -> NState:
         """ View change happened,
         increments the view number, resets in_messages buffer and timeout variable. """
-        return NState(state.node_view + 1,
+        return NState(None, state.node_view + 1,
                       state.node_id,
                       [],
                       state.counting_messages,
@@ -237,7 +237,7 @@ class Giskard:
     @staticmethod
     def flip_timeout(state: NState) -> NState:
         """ Sets the timeout variable to True """
-        return NState(state.node_view,
+        return NState(None, state.node_view,
                       state.node_id,
                       state.in_messages,
                       state.counting_messages,
@@ -602,7 +602,7 @@ class Giskard:
         return state_prime == \
             Giskard.record_plural(state, Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state))) \
             and lm == Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state)) \
-            and state == NState(state.node_id) \
+            and state == NState(None, 0, state.node_id) \
             and Giskard.honest_node(node) \
             and Giskard.is_block_proposer(node) \
             and not state.timeout
@@ -966,7 +966,7 @@ class Giskard:
                                 msg.sender,
                                 msg_vc.block,
                                 GiskardGenesisBlock())
-        state_prime_prime = NState(state_prime.node_view + 1,
+        state_prime_prime = NState(None, state_prime.node_view + 1,
                                    state_prime.node_id,
                                    [],
                                    state_prime.counting_messages.append(msg_pr),
@@ -1142,36 +1142,36 @@ class Giskard:
                 lm = Giskard.propose_block_init_set(state, msg)[1]
             case giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
                 msg = state.in_messages[
-                    state.in_messages.count - 1]  # Todo check in what order the in messages are processed
+                    len(state.in_messages) - 1]  # Todo check in what order the in messages are processed
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
                 if not old_version:  # bug in the original Coq code, this is here for testing the impact
                     lm = Giskard.pending_PrepareVote(state, msg, block_cache)
             case giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
                 lm = [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache)]
             case giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
             case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
             case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
             case giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
                 lm = Giskard.pending_PrepareVote(state, msg, block_cache)
             case giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
                 lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
                                      # Send ViewChangeQC message before incrementing view to ensure the others can process it
@@ -1186,11 +1186,11 @@ class Giskard:
                                                  Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
                                                  block_cache)]
             case giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
             case giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
             case giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
-                msg = state.in_messages[state.in_messages.count - 1]
+                msg = state.in_messages[len(state.in_messages) - 1]
                 block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
                 lm = Giskard.pending_PrepareVote(state, msg, block_cache)
         return [msg, block_cache, lm]
@@ -1243,11 +1243,11 @@ class Giskard:
     # region global state trace
     @staticmethod
     def protocol_trace(gtrace: GTrace, nodes, old_version=False) -> bool:
-        for i in range(0, gtrace.count - 1):
+        for i in range(0, len(gtrace.gtrace) - 1):
             if i == 0:
                 if not gtrace[0] == GState(nodes):
                     return False
-            if i < gtrace.count - 1:
+            if i < len(gtrace.gtrace) - 1:
                 tmp_state = gtrace[i]
                 if not Giskard.GState_transition(tmp_state, gtrace[i + 1], nodes, old_version):
                     return False
@@ -1291,7 +1291,7 @@ class Giskard:
         and both reach prepare stage for n and m's local state respectively in some view p,
         but are not equal, then we can prove a contradiction. """
         for gtrace in gtraces:
-            for i in range(0, gtrace.count - 1):  # iterating through the global states in the trace
+            for i in range(0, len(gtrace.gtrace) - 1):  # iterating through the global states in the trace
                 gstate = gtrace[i].gstate
                 nodes = set(gstate.keys())
                 for node1, node2 in itertools.product(nodes, nodes):
@@ -1313,13 +1313,13 @@ class Giskard:
     """ TODO check if the three @staticmethod
         def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
             for gtrace in gtraces:
-                for i in range(0, gtrace.count - 1):
+                for i in range(0, len(gtrace) - 1):
                     gstate = gtrace[i].gstate
                     nodes = list(gstate.keys())
                     view = gstate[nodes[0]].node_view
                     for v in range(1, view):  # TODO is there a view 0 except for the genesis block?
-                        for n in range(0, nodes.count - 1):
-                            if n < nodes.count - 1:  # we are comparing two different nodes, are there not more are we done
+                        for n in range(0, len(nodes) - 1):
+                            if n < len(nodes) - 1:  # we are comparing two different nodes, are there not more are we done
                                 node1 = nodes[n]
                                 node2 = nodes[n + 1]
                                 blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
@@ -1338,7 +1338,7 @@ class Giskard:
     """ TODO check if the three return the same thing @staticmethod
     def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
         for gtrace in gtraces:
-            for i in range(0, gtrace.count - 1):
+            for i in range(0, len(gtrace) - 1):
                 gstate = gtrace[i].gstate
                 nodes = set(gstate.keys())
                 view = gstate[nodes.pop()].node_view
@@ -1397,7 +1397,7 @@ class Giskard:
         the same height, and are both in precommit stage in n and m's local state respectively,
         but are not equal, then we can prove a contradiction. """
         for gtrace in gtraces:
-            for i in range(0, gtrace.count - 1):  # iterating through the global states in the trace
+            for i in range(0, len(gtrace.gtrace) - 1):  # iterating through the global states in the trace
                 gstate = gtrace[i].gstate
                 nodes = set(gstate.keys())
                 for node1, node2 in itertools.product(nodes, nodes):
@@ -1442,7 +1442,7 @@ class Giskard:
         that are both at precommit stage for <<n>> and <<m>>'s local state, respectively,
         then we can prove a contradiction. """
         for gtrace in gtraces:
-            for i in range(0, gtrace.count - 1):  # iterating through the global states in the trace
+            for i in range(0, len(gtrace.gtrace) - 1):  # iterating through the global states in the trace
                 gstate = gtrace[i].gstate
                 nodes = set(gstate.keys())
                 for node1, node2 in itertools.product(nodes, nodes):

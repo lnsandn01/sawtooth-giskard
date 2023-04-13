@@ -1,17 +1,19 @@
+from typing import List
+
+from giskard_message import GiskardMessage
+from giskard_node import GiskardNode
+
+
 class NState:
     """State the Giskard node is in"""
 
-    def __init__(self, node):
-        self.node_view = 0
-        self.node_id = node.node_id
-        self.in_messages = []
-        self.counting_messages = []
-        self.out_messages = []
-        self.timeout = False
-
-    def __init__(self, node_view, node_id, in_messages, counting_messages, out_messages, timeout):
+    def __init__(self, node: GiskardNode = None,  node_view: int = 0, node_id="",
+                 in_messages: List[GiskardMessage] = [], counting_messages: List[GiskardMessage] = [],
+                 out_messages: List[GiskardMessage] = [], timeout: bool = False):
         self.node_view = node_view
         self.node_id = node_id
+        if node is not None:
+            self.node_id = node.node_id
         self.in_messages = in_messages
         self.counting_messages = counting_messages
         self.out_messages = out_messages

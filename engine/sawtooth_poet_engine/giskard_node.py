@@ -8,7 +8,7 @@ class GiskardNode:
         self.dishonest = dishonest
         self.block_cache = block_cache
         if not block_cache:
-            self.block_cache = BlockCacheMock()
+            self.block_cache = BlockCacheMock([])
 
     def __eq__(self, other):
         if not isinstance(other, GiskardNode):
