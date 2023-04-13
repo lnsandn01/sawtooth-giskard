@@ -9,6 +9,7 @@ from oracle import _BlockCacheProxy
 from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
+from sawtooth_poet_engine.giskard_node import GiskardNode
 import giskard_state_transition_type
 from sawtooth_poet_engine.giskard_global_state import GState
 from sawtooth_poet_engine.giskard_global_trace import GTrace
@@ -1248,7 +1249,7 @@ class Giskard:
                     return False
             if i < gtrace.count - 1:
                 tmp_state = gtrace[i]
-                if not Giskard.GState_transition(tmp_state, gtrace[i + 1, nodes, old_version]):
+                if not Giskard.GState_transition(tmp_state, gtrace[i + 1], nodes, old_version):
                     return False
         return True
 
@@ -1258,7 +1259,7 @@ class Giskard:
         """ Returns all broadcasted PrepareVote msgs for a block in the given view. """
         return list(filter(lambda msg: msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE
                                        and msg.block == block
-                                       and msg.view == view, gtrace[i][1]))
+                                       and msg.view == view, gtrace[i].broadcast_msgs))
 
     @staticmethod
     def vote_quorum_in_view_global(gtrace: GTrace, i: int, block: GiskardBlock, view: int, peers) -> bool:
@@ -1268,50 +1269,71 @@ class Giskard:
     # endregion
 
     # region safety property one: prepare stage height injectivity
-    """ Prepare stage height injectivity definition """
+    @staticmethod
+    def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers) -> bool:
+        """ Prepare stage height injectivity definition """
 
-    """ Recall that a block is in prepare stage in some local state if it has
-    received quorum PrepareVote messages or a PrepareQC message in the current
-    view or some previous view.
-    
-    The first safety property states that no two same height blocks can be
-    at prepare stage in the same view, i.e., prepare stage block height is injective
-    in the same view. The first safety property differs from the following two in that
-    it contains an additional premise restricting the view during which the two blocks
-    reached prepare stage. This is important because it is possible for multiple blocks
-    at the same height to reach prepare stage across different views in the case of
-    abnormal view changes.
-    
-    In any global state i in a valid protocol trace tr that begins with the initial
-    state and respects the protocol transition rules, if there are two participating
-    nodes n and m, and two blocks b1 b2, such that b1 and b2 have the same height,
-    and both reach prepare stage for n and m's local state respectively in some view p,
-    but are not equal, then we can prove a contradiction. """
+        """ Recall that a block is in prepare stage in some local state if it has
+        received quorum PrepareVote messages or a PrepareQC message in the current
+        view or some previous view.
+
+        The first safety property states that no two same height blocks can be
+        at prepare stage in the same view, i.e., prepare stage block height is injective
+        in the same view. The first safety property differs from the following two in that
+        it contains an additional premise restricting the view during which the two blocks
+        reached prepare stage. This is important because it is possible for multiple blocks
+        at the same height to reach prepare stage across different views in the case of
+        abnormal view changes.
+
+        In any global state i in a valid protocol trace tr that begins with the initial
+        state and respects the protocol transition rules, if there are two participating
+        nodes n and m, and two blocks b1 b2, such that b1 and b2 have the same height,
+        and both reach prepare stage for n and m's local state respectively in some view p,
+        but are not equal, then we can prove a contradiction. """
+        for gtrace in gtraces:
+            for i in range(0, gtrace.count - 1):  # iterating through the global states in the trace
+                gstate = gtrace[i].gstate
+                nodes = set(gstate.keys())
+                for node1, node2 in itertools.product(nodes, nodes):
+                    if node1 == node2:
+                        continue
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers).block_store.blocks
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers).block_store.blocks
+                    view = min(gstate[node1][0].node_view, gstate[node2][0].node_view)
+                    for v, block1, block2 in itertools.product(range(1, view), blocks1, blocks2):  # Todo check if views start with 0 or 1
+                        if node1 in peers \
+                                and node2 in peers \
+                                and block1 != block2 \
+                                and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1, peers) \
+                                and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2, peers) \
+                                and block1.block_num == block2.block_num:  # blocks are different but same block height
+                            return False  # TODO more printout info would be nice for testing
+        return True
 
     """ TODO check if the three @staticmethod
-    def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
-        for gtrace in gtraces:
-            for i in range(0, gtrace.count - 1):
-                gstate = gtrace[i].gstate
-                nodes = list(gstate.keys())
-                view = gstate[nodes[0]].node_view
-                for v in range(1, view):  # TODO is there a view 0 except for the genesis block?
-                    for n in range(0, nodes.count - 1):
-                        if n < nodes.count - 1:  # we are comparing two different nodes, are there not more are we done
-                            node1 = nodes[n]
-                            node2 = nodes[n + 1]
-                            blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
-                            blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
-                            for block1 in blocks1:
-                                for block2 in blocks2:
-                                    if node1 in peers \
-                                            and node2 in peers \
-                                            and block1 != block2 \
-                                            and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1) \
-                                            and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2) \
-                                            and block1.block_num == block2.block_num:  # same block height
-                                        return False
-        return True """
+        def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
+            for gtrace in gtraces:
+                for i in range(0, gtrace.count - 1):
+                    gstate = gtrace[i].gstate
+                    nodes = list(gstate.keys())
+                    view = gstate[nodes[0]].node_view
+                    for v in range(1, view):  # TODO is there a view 0 except for the genesis block?
+                        for n in range(0, nodes.count - 1):
+                            if n < nodes.count - 1:  # we are comparing two different nodes, are there not more are we done
+                                node1 = nodes[n]
+                                node2 = nodes[n + 1]
+                                blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
+                                blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
+                                for block1 in blocks1:
+                                    for block2 in blocks2:
+                                        if node1 in peers \
+                                                and node2 in peers \
+                                                and block1 != block2 \
+                                                and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1) \
+                                                and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2) \
+                                                and block1.block_num == block2.block_num:  # same block height
+                                            return False
+            return True """
 
     """ TODO check if the three return the same thing @staticmethod
     def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
@@ -1337,28 +1359,6 @@ class Giskard:
                                         return False
         return True """
 
-    @staticmethod
-    def prepare_stage_same_view_height_injective_statement(gtraces: List[GTrace], peers):
-        for gtrace in gtraces:
-            for i in range(0, gtrace.count - 1):
-                gstate = gtrace[i].gstate
-                nodes = set(gstate.keys())
-                for node1, node2 in itertools.product(nodes, nodes):
-                    if node1 == node2:
-                        continue
-                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers)
-                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers)
-                    view = min(gstate[node1][0].node_view, gstate[node2][0].node_view)
-                    for v, block1, block2 in itertools.product(range(1, view), blocks1, blocks2):  # Todo check if views start with 0 or 1
-                        if node1 in peers \
-                                and node2 in peers \
-                                and block1 != block2 \
-                                and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1) \
-                                and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2) \
-                                and block1.block_num == block2.block_num:  # blocks are different but same block height
-                            return False
-        return True
-
     """ Intuitively, the proof of this property follows directly from the definition of
     non-Byzantine/honest voting behavior: honest nodes cannot vote for two conflicting
     blocks during the same view. If two conflicting blocks reach prepare stage in the
@@ -1368,6 +1368,98 @@ class Giskard:
     there are no more than 1/3 Byzantine/dishonest blocks. Therefore, we reach a contradiction. """
 
     """ TODO Reducing the proof? """
+    # endregion
 
+    # region safety property two: precommit stage height injectivity
+    @staticmethod
+    def precommit_stage(gtrace: GTrace, i: int, node: GiskardNode, block: GiskardBlock, peers) -> bool:
+        """ Precommit stage definition
+        We say that a block is in precommit stage in some local state iff it is in
+        prepare stage, and its child block is in prepare stage, i.e., it has received
+        quorum PrepareVote messages or a PrepareQC message in the current view or
+        some previous view. """
+        child_block = node.block_cache.get_child_block(block)
+        return child_block is not None \
+            and node.block_cache.get_parent_block(child_block) == block \
+            and Giskard.prepare_stage(gtrace[i].gstate[node.node_id], block, peers) \
+            and Giskard.prepare_stage(gtrace[i].gstate[node.node_id], child_block, peers)
+
+    @staticmethod
+    def precommit_stage_height_injective_statement(gtraces: List[GTrace], peers) -> bool:
+        """ Precommit stage height injectivity statement
+        The second safety property states that no two same height blocks can be at
+        precommit stage, i.e., precommit stage block height is injective. The second safety
+        property does not require that the two blocks reach precommit stage in the same view. *)
+
+        (** More formally, in any global state i in a valid protocol trace tr that begins
+        with the initial state and respects the protocol transition rules, if there are
+        two participating nodes n and m, and two blocks b1 b2, such that b1 and b2 have
+        the same height, and are both in precommit stage in n and m's local state respectively,
+        but are not equal, then we can prove a contradiction. """
+        for gtrace in gtraces:
+            for i in range(0, gtrace.count - 1):  # iterating through the global states in the trace
+                gstate = gtrace[i].gstate
+                nodes = set(gstate.keys())
+                for node1, node2 in itertools.product(nodes, nodes):
+                    if node1 == node2:
+                        continue
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers).block_store.blocks
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers).block_store.blocks
+                    for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
+                        if node1 in peers \
+                                and node2 in peers \
+                                and block1 != block2 \
+                                and Giskard.precommit_stage(gtrace, i, block1, peers) \
+                                and Giskard.precommit_stage(gtrace, i, block2, peers) \
+                                and block1.block_num == block2.block_num:  # blocks are different but same block height
+                            return False  # TODO more printout info would be nice for testing
+        return True
+    # endregion
+
+    # region safety property three: commit stage height injectivity
+    @staticmethod
+    def commit_stage(gtrace: GTrace, i: int, node: GiskardNode, block: GiskardBlock, peers) -> bool:
+        """ Commit stage definition
+
+        We say that a block is in commit stage in some local state iff it is in precommit stage
+        and its child block is in precommit stage."""
+        child_block = node.block_cache.get_child_block(block)
+        return child_block is not None \
+            and node.block_cache.get_parent_block(child_block) == block \
+            and Giskard.precommit_stage(gtrace, i, node, block, peers) \
+            and Giskard.precommit_stage(gtrace, i, node, child_block, peers)
+
+    @staticmethod
+    def commit_height_injective_statement(gtraces: List[GTrace], peers) -> bool:
+        """ Commit stage height injectivity statement
+
+        The third and final safety property states that no two same height blocks can be at
+        commit stage, i.e., commit stage block height is injective.
+
+        In any global state <<i>> in a valid protocol trace <<tr>> that begins with the
+        initial state and respects the protocol transition rules, if there are two participating
+        nodes <<n>> and <<m>>, and two distinct blocks <<b1>> and <<b2>> of the same height
+        that are both at precommit stage for <<n>> and <<m>>'s local state, respectively,
+        then we can prove a contradiction. """
+        for gtrace in gtraces:
+            for i in range(0, gtrace.count - 1):  # iterating through the global states in the trace
+                gstate = gtrace[i].gstate
+                nodes = set(gstate.keys())
+                for node1, node2 in itertools.product(nodes, nodes):
+                    if node1 == node2:
+                        continue
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1],
+                                                                                 peers).block_store.blocks
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2],
+                                                                                 peers).block_store.blocks
+                    for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
+                        if node1 in peers \
+                                and node2 in peers \
+                                and block1 != block2 \
+                                and Giskard.commit_stage(gtrace, i, block1, peers) \
+                                and Giskard.commit_stage(gtrace, i, block2, peers) \
+                                and block1.block_num == block2.block_num:  # blocks are different but same block height
+                            return False  # TODO more printout info would be nice for testing
+        return True
 
     # endregion

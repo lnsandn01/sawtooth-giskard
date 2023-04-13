@@ -50,7 +50,6 @@ class GiskardEngine(Engine): # is a GiskardNode
         self._path_config = path_config
         self._component_endpoint = component_endpoint
         self._service = None
-        self._block_cache = None
         self._signer = self._load_identity_signer(self._path_config.key_dir, 'validator')
         self.validator_id = self._signer.get_public_key().as_hex()
 
@@ -106,7 +105,7 @@ class GiskardEngine(Engine): # is a GiskardNode
          so it starts receiving messages"""
         self._service = service
         stream = Stream(self._component_endpoint)
-        self._block_cache = _BlockCacheProxy(self._service, stream)
+        self.node.block_cache = _BlockCacheProxy(self._service, stream)
 
         # 1. Wait for an incoming message.
         # 2. Check for exit.
