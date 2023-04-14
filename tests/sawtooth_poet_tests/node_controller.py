@@ -184,7 +184,7 @@ def validator_cmds(num,
     ])
 
     with open(
-        '/project/sawtooth-poet/simulator/packaging/'
+        '/usr/lib/python3/dist-packages/sawtooth_poet_simulator/packaging/'
             'simulator_rk_pub.pem') as fd:
         public_key_pem = fd.read()
 

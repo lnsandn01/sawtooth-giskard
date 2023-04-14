@@ -1,8 +1,8 @@
 from typing import List
 
-from giskard_node import GiskardNode
-from giskard_nstate import NState
-from giskard_message import GiskardMessage
+from sawtooth_poet_engine.giskard_node import GiskardNode
+from sawtooth_poet_engine.giskard_nstate import NState
+from sawtooth_poet_engine.giskard_message import GiskardMessage
 
 
 class GState:

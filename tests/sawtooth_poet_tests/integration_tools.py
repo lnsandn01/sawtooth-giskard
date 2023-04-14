@@ -25,9 +25,9 @@ from urllib.error import URLError
 from http.client import RemoteDisconnected
 import requests
 
-from consensus.exceptions import UnknownBlock, SameAsPreviousBlockAndNotGenesis
-from giskard_block import GiskardBlock
-from journal.block_wrapper import NULL_BLOCK_IDENTIFIER
+from sawtooth_sdk.consensus.exceptions import UnknownBlock, SameAsPreviousBlockAndNotGenesis
+from sawtooth_poet_engine.giskard_block import GiskardBlock
+from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER
 
 LOGGER = logging.getLogger(__name__)
 
@@ -239,12 +239,12 @@ class SetSawtoothHome:
 
 
 class BlockCacheMock:
-    def __init__(self, blocks: list):
+    def __init__(self, blocks):
         self.block_store = BlockStoreMock(blocks)
 
 
 class BlockStoreMock:
-    def __init__(self, blocks: list):
+    def __init__(self, blocks):
         self.blocks = blocks
 
     @property
@@ -254,7 +254,7 @@ class BlockStoreMock:
     def get_chain_head(self):
         return self.blocks[-1]
 
-    def get_blocks(self, block_ids: list):
+    def get_blocks(self, block_ids):
         blocks = [block for block in self.blocks if block_ids.__contains__(block.block_id)]
         return {
             block.block_id: block

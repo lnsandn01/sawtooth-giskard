@@ -1,7 +1,7 @@
 from typing import List
 
-from giskard_message import GiskardMessage
-from giskard_node import GiskardNode
+from sawtooth_poet_engine.giskard_message import GiskardMessage
+from sawtooth_poet_engine.giskard_node import GiskardNode
 
 
 class NState:

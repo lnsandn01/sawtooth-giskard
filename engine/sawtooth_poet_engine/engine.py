@@ -191,6 +191,20 @@ class GiskardEngine(Engine): # is a GiskardNode
         crypto_factory = CryptoFactory(context)
         return crypto_factory.new_signer(private_key)
 
+    def _handle_new_block(self, block):
+        pass
+
+    def _handle_valid_block(self, block_id):
+        pass
+
+    def _handle_invalid_block(self, block_id):
+        pass
+
+    def _handle_peer_msgs(self, msg):
+        # PoET does not care about peer notifications
+        pass
+
+
 class PoetEngine(Engine):
     def __init__(self, path_config, component_endpoint):
         # components
@@ -332,12 +346,7 @@ class PoetEngine(Engine):
             Message.CONSENSUS_NOTIFY_BLOCK_COMMIT: self._handle_committed_block,
             Message.CONSENSUS_NOTIFY_PEER_CONNECTED: self._handle_peer_msgs,
             Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED: self._handle_peer_msgs,
-            Message.CONSENSUS_NOTIFY_PEER_MESSAGE: self._handle_peer_msgs,
-            Message.CONSENSUS_PREPARE_BLOCK: self._handle_prepare_block,
-            Message.CONSENSUS_PREPARE_VOTE: self._handle_prepare_vote,
-            Message.CONSENSUS_VIEW_CHANGE: self._handle_view_change,
-            Message.CONSENSUS_PREPARE_QC: self._handle_prepare_qc,
-            Message.CONSENSUS_VIEW_CHANGE_QC: self._handle_view_change_qc
+            Message.CONSENSUS_NOTIFY_PEER_MESSAGE: self._handle_peer_msgs
         }
 
         while True:

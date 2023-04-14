@@ -24,7 +24,7 @@ from sawtooth_sdk.processor.config import get_log_config
 from sawtooth_sdk.processor.config import get_log_dir
 
 from sawtooth_sdk.consensus.zmq_driver import ZmqDriver
-from sawtooth_poet_engine.engine import PoetEngine, GiskardEngine
+from sawtooth_poet_engine.engine import GiskardEngine
 
 from sawtooth_poet.config.path import load_path_config
 from sawtooth_poet.exceptions import LocalConfigurationError
@@ -102,7 +102,7 @@ def main(args=None):
             log_dir = get_log_dir()
             log_configuration(
                 log_dir=log_dir,
-                name='giskard-engine')
+                name='poet-engine')
 
         init_console_logging(verbose_level=opts.verbose)
 

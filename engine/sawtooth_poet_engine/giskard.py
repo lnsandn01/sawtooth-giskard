@@ -5,12 +5,11 @@ from collections import namedtuple
 from functools import reduce
 from typing import List
 
-from oracle import _BlockCacheProxy
 from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
 from sawtooth_poet_engine.giskard_node import GiskardNode
-import giskard_state_transition_type
+import sawtooth_poet_engine.giskard_state_transition_type as giskard_state_transition_type
 from sawtooth_poet_engine.giskard_global_state import GState
 from sawtooth_poet_engine.giskard_global_trace import GTrace
 from sawtooth_poet_tests.integration_tools import BlockCacheMock
@@ -1090,38 +1089,38 @@ class Giskard:
     def get_transition(t, state: NState, msg: GiskardMessage,
                        state_prime: NState, lm: List[GiskardMessage],
                        node, block_cache, peers, old_version=False) -> bool:
-        match t:
-            case giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
-                return Giskard.propose_block_init(state, msg, state_prime, lm, node)
-            case giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
-                return Giskard.discard_view_invalid(state, msg, state_prime, lm, node)
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
-                return Giskard.process_PrepareBlock_duplicate(state, msg, state_prime, lm, node)
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
+
+        if t == giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
+            return Giskard.propose_block_init(state, msg, state_prime, lm, node)
+        elif t == giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
+            return Giskard.discard_view_invalid(state, msg, state_prime, lm, node)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
+            return Giskard.process_PrepareBlock_duplicate(state, msg, state_prime, lm, node)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
+            return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
+            if old_version:  # bug in the original Coq code, this is here for testing the impact
                 return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
-                if old_version:  # bug in the original Coq code, this is here for testing the impact
-                    return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache)
-                return Giskard.process_PrepareBlock_vote(state, msg, state_prime, lm, node, block_cache)
-            case giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
-                return Giskard.process_PrepareVote_vote(state, msg, state_prime, lm, node, block_cache, peers)
-            case giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
-                return Giskard.process_PrepareVote_wait(state, msg, state_prime, lm, node, block_cache)
-            case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
-                return Giskard.process_PrepareQC_last_block_new_proposer(state, msg, state_prime, lm, node)
-            case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
-                return Giskard.process_PrepareQC_last_block(state, msg, state_prime, lm, node)
-            case giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
-                return Giskard.process_PrepareQC_non_last_block(state, msg, state_prime, lm, node, block_cache)
-            case giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
-                return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache,
-                                                                      peers)
-            case giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
-                return Giskard.process_ViewChange_pre_quorum(state, msg, state_prime, lm, node, peers)
-            case giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
-                return Giskard.process_ViewChangeQC_single(state, msg, state_prime, lm, node)
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
-                return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache)
+            return Giskard.process_PrepareBlock_vote(state, msg, state_prime, lm, node, block_cache)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
+            return Giskard.process_PrepareVote_vote(state, msg, state_prime, lm, node, block_cache, peers)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
+            return Giskard.process_PrepareVote_wait(state, msg, state_prime, lm, node, block_cache)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
+            return Giskard.process_PrepareQC_last_block_new_proposer(state, msg, state_prime, lm, node)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
+            return Giskard.process_PrepareQC_last_block(state, msg, state_prime, lm, node)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
+            return Giskard.process_PrepareQC_non_last_block(state, msg, state_prime, lm, node, block_cache)
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
+            return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache,
+                                                                  peers)
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
+            return Giskard.process_ViewChange_pre_quorum(state, msg, state_prime, lm, node, peers)
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
+            return Giskard.process_ViewChangeQC_single(state, msg, state_prime, lm, node)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
+            return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache)
 
     @staticmethod
     def create_mock_block_cache_from_counting_msgs(state: NState, peers) -> BlockCacheMock:
@@ -1137,62 +1136,61 @@ class Giskard:
         msg = None
         block_cache = None
         lm = []
-        match t:
-            case giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
-                lm = Giskard.propose_block_init_set(state, msg)[1]
-            case giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
-                msg = state.in_messages[
-                    len(state.in_messages) - 1]  # Todo check in what order the in messages are processed
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
-                if not old_version:  # bug in the original Coq code, this is here for testing the impact
-                    lm = Giskard.pending_PrepareVote(state, msg, block_cache)
-            case giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
-                lm = [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache)]
-            case giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
-            case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
-            case giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
-            case giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+        if t == giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
+            lm = Giskard.propose_block_init_set(state, msg)[1]
+        elif t == giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
+            msg = state.in_messages[
+                len(state.in_messages) - 1]  # Todo check in what order the in messages are processed
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_DUPLICATE_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_PENDING_VOTE_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+            if not old_version:  # bug in the original Coq code, this is here for testing the impact
                 lm = Giskard.pending_PrepareVote(state, msg, block_cache)
-            case giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
-                lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
-                                     # Send ViewChangeQC message before incrementing view to ensure the others can process it
-                                     state.node_view,
-                                     state.node_id,
-                                     Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
-                                     GiskardGenesisBlock()),
-                      Giskard.make_ViewChangeQC(state,
-                                                Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
-                      # send PrepareBlock messages
-                      Giskard.make_PrepareBlocks(Giskard.increment_view(state),
-                                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
-                                                 block_cache)]
-            case giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-            case giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-            case giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
-                msg = state.in_messages[len(state.in_messages) - 1]
-                block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
-                lm = Giskard.pending_PrepareVote(state, msg, block_cache)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+            lm = [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache)]
+        elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+            lm = Giskard.pending_PrepareVote(state, msg, block_cache)
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+            lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                                 # Send ViewChangeQC message before incrementing view to ensure the others can process it
+                                 state.node_view,
+                                 state.node_id,
+                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
+                                 GiskardGenesisBlock()),
+                  Giskard.make_ViewChangeQC(state,
+                                            Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
+                  # send PrepareBlock messages
+                  Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                             Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
+                                             block_cache)]
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
+            msg = state.in_messages[len(state.in_messages) - 1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+            lm = Giskard.pending_PrepareVote(state, msg, block_cache)
         return [msg, block_cache, lm]
 
     # endregion

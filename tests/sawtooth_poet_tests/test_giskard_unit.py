@@ -2,7 +2,7 @@ import unittest
 import logging
 from typing import List
 
-import giskard_state_transition_type
+import sawtooth_poet_engine.giskard_state_transition_type as giskard_state_transition_type
 from giskard_global_trace import GTrace
 from giskard_node import GiskardNode
 from integration_tools import BlockCacheMock

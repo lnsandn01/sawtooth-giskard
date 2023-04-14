@@ -175,7 +175,7 @@ class TestGiskardNetwork(unittest.TestCase):
         for proc in processes:
             if proc.returncode is not None:
                 raise subprocess.CalledProcessError(proc.pid, proc.returncode)
-
+        import pytest; pytest.set_trace()
         self.nodes[num] = processes
         self.clients[num] = IntkeyClient(
             NodeController.http_address(num), WAIT)
