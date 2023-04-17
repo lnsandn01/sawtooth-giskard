@@ -1,3 +1,5 @@
+import random
+import string
 import unittest
 import time
 import logging
@@ -5,9 +7,13 @@ import subprocess
 import shlex
 from tempfile import mkdtemp
 
+import sawtooth_sdk.protobuf.consensus_pb2 as consensus_pb2
+from sawtooth_sdk.consensus.zmq_service import ZmqService
+from sawtooth_sdk.messaging.stream import Stream
 from sawtooth_poet_tests.integration_tools import SetSawtoothHome
 from sawtooth_poet_tests import node_controller as NodeController
 from sawtooth_poet_tests.intkey_client import IntkeyClient
+from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
@@ -175,11 +181,27 @@ class TestGiskardNetwork(unittest.TestCase):
         for proc in processes:
             if proc.returncode is not None:
                 raise subprocess.CalledProcessError(proc.pid, proc.returncode)
-        import pytest; pytest.set_trace()
         self.nodes[num] = processes
+        # send activation message to engine
+        """address = 'tcp://127.0.0.1:{}'.format(5050 + num)
+        stream = Stream(address)
+        zmq_service = ZmqService(
+                    stream=stream,
+                    timeout=5000)
+        message = Message(
+            message_type=Message.CONSENSUS_NOTIFY_ENGINE_ACTIVATED,
+            correlation_id=self.generate_correlation_id(),
+            content=consensus_pb2.ConsensusNotifyEngineActivated().SerializeToString())
+
+        zmq_service.send_to(b"receiver_id", address, message.SerializeToString())"""
+
         self.clients[num] = IntkeyClient(
             NodeController.http_address(num), WAIT)
         time.sleep(1)
+
+    @staticmethod
+    def generate_correlation_id():
+        return ''.join(random.choice(string.ascii_letters) for _ in range(16))
 
     # nodes are stopped in FIFO order
     def stop_nodes(self, stop_nodes_per_round):
