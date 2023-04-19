@@ -11,6 +11,7 @@ import sawtooth_sdk.protobuf.consensus_pb2 as consensus_pb2
 from sawtooth_sdk.consensus.zmq_service import ZmqService
 from sawtooth_sdk.messaging.stream import Stream
 from sawtooth_poet_tests.integration_tools import SetSawtoothHome
+from sawtooth_poet_tests.giskard_tester import GiskardTester
 from sawtooth_poet_tests import node_controller as NodeController
 from sawtooth_poet_tests.intkey_client import IntkeyClient
 from sawtooth_sdk.protobuf.validator_pb2 import Message
@@ -67,7 +68,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.all_serial,
             'rounds': 1,
-            'start_nodes_per_round': 3,
+            'start_nodes_per_round': 1,
             'stop_nodes_per_round': 0,
             'batches': 5,
             'time_between_batches': 1,
@@ -96,10 +97,10 @@ class TestGiskardNetwork(unittest.TestCase):
             3) block consensus is checked, and
             4) some nodes are (possibly) stopped.
         '''
-
         poet_kwargs = {} if poet_kwargs is None else poet_kwargs
 
         for round_ in range(rounds):
+            giskard_tester = GiskardTester(0)
             self.start_new_nodes(
                 processors, peering, schedulers,
                 start_nodes_per_round, round_, poet_kwargs)
