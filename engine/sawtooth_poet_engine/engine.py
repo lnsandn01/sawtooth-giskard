@@ -47,10 +47,11 @@ class GiskardEngine(Engine):
         Keeps state
         Handles incoming messages, validates blocks
         Proposes new Blocks if it is Proposer in the current view"""
-    def __init__(self, path_config, component_endpoint):
+    def __init__(self, path_config, component_endpoint, validator_connect):
         # components
         self._path_config = path_config
         self._component_endpoint = component_endpoint
+        self._validator_connect = validator_connect
         self._service = None
         self._oracle = None
 
@@ -74,22 +75,11 @@ class GiskardEngine(Engine):
         self.node = None
         # original NState from the formal specification
         self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
-        tester_endpoint = 'tcp://*3030'
-        #self.tester_stream = Stream(tester_endpoint)
+        tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
-        LOGGER.info("socket created")
-        self.socket.bind('tcp://127.0.0.1:3030')
-        LOGGER.info("socket bound")
-        messages = [100,200,300]
-        curMsg = 0
-        while True:
-            self.socket.send_pyobj({curMsg:messages[curMsg]})
-            LOGGER.info("engine sent msg")
-            if curMsg == 2:
-                curMsg = 0
-            else:
-                curMsg = curMsg + 1
+        LOGGER.info("socket created " + tester_endpoint)
+        self.socket.connect(tester_endpoint)
 
         """ end Giskard stuff """
 
@@ -105,6 +95,10 @@ class GiskardEngine(Engine):
 
     def additional_protocols(self):
         return [('poet', '0.1')]
+
+    @staticmethod
+    def tester_endpoint(num):
+        return 'tcp://127.0.0.1:{}'.format(3030+num)
 
     def stop(self):
         self._exit = True
@@ -212,6 +206,7 @@ class GiskardEngine(Engine):
         validator_id = signer.get_public_key().as_hex()
         self.node = GiskardNode(validator_id, 0, self.dishonest)
         self.nstate = NState(self.node)
+        self.socket.send_pyobj(self.nstate)
         """file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/engine_" + validator_id + ".txt"
         f = open(file_name, "w")
         f.write("")
@@ -250,10 +245,6 @@ class GiskardEngine(Engine):
                     f.write(str(data) + "\n")
                     f.close()"""
                     try:
-                        #self.tester_stream.send(type_tag, data.SerializeToString())
-                        #self.tester_stream.send(Message.CONSENSUS_NOTIFY_PEER_CONNECTED, consensus_pb2.ConsensusNotifyPeerConnected().SerializeToString())
-                        #LOGGER.info("\n\n\n\n\n\n\nEngine trying to print future result" + str(future.result()))
-                        #LOGGER.info("\n\n\n\n apparently sent a msg to the tester\n\n\n")
                         handle_message = handlers[type_tag]
                     except KeyError:
                         LOGGER.error('Unknown type tag: %s',

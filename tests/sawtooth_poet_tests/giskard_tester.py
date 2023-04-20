@@ -1,12 +1,19 @@
 import concurrent
+import copy
 import threading
 import time
 import sys
+from typing import List
+
 import zmq
 import socket
+import json
+import jsonpickle
 from queue import Queue
 from threading import Thread
 
+from sawtooth_poet_engine.giskard_global_state import GState
+from sawtooth_poet_engine.giskard_nstate import NState
 from sawtooth_sdk.consensus.driver import Driver
 from sawtooth_sdk.consensus.engine import StartupState
 from sawtooth_sdk.consensus.engine import PeerMessage
@@ -23,57 +30,71 @@ class GiskardTester:
         """ Create Streams for each engine in the net for exchanging nstates with each other """
         self._exit = False
         self.num_endpoints = num_endpoints
-        #self.streams = []
-        #self._stream = Stream(self.tester_endpoint(0))
+        self.sockets = []
         self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.SUB)
-        self.socket.connect('tcp://127.0.0.1:3030')
-        self.socket.setsockopt_string(zmq.SUBSCRIBE, '')
-
-        print("\n\n\nTester socket bound\n\n\n")
-        #for i in range(0, num_endpoints):
-        #    self.streams.append(Stream(self.tester_endpoint(i)))
+        self.poller = zmq.Poller()
+        for i in range(0, num_endpoints):
+            self.poller, self.sockets = GiskardTester.create_socket(i, self.context, self.poller, self.sockets)
+        print("tester bound sockets")
+        self.file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_" + str(int(time.time())) + ".json"
+        f = open(self.file_name, "w")
+        f.write("")
+        f.close()
+        self.file_name2 = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
+        f = open(self.file_name2, "w")
+        f.write("")
+        f.close()
+        self.gtrace_json = list()
+        self.nodes = []
         t1 = threading.Thread(target=self.tester_loop, args=())
         t1.start()
 
     @staticmethod
+    def create_socket(i, context, poller, sockets):
+        s = context.socket(zmq.SUB)
+        s.bind(GiskardTester.tester_endpoint(i))
+        s.setsockopt_string(zmq.SUBSCRIBE, '')
+        poller.register(s, zmq.POLLIN)
+        sockets.append(s)
+        return [poller, sockets]
+
+    @staticmethod
     def tester_endpoint(num):
-        return 'tcp://127.0.0.2:{}'.format(3030)
+        return 'tcp://127.0.0.1:{}'.format(3030+num)
 
     def tester_loop(self):
         while True:
-            print("\n\nWaiting for message\n\n")
-            message = self.socket.recv_pyobj()
-            print("\n\n\nTester Msg received ", message, "\n\n\n")
+            socks = dict(self.poller.poll())
+            for sock in self.sockets:
+                if sock in socks and socks[sock] == zmq.POLLIN:
+                    nstate: NState = sock.recv_pyobj()
+                    if nstate.node_id not in self.nodes:
+                        self.nodes.append(nstate.node_id)
+                    #print("\n\n\nTester Msg received ", nstate.node_id, "\n\n\n")
+                    self.gtrace_json.append(jsonpickle.encode(nstate, unpicklable=True))
+                    f = open(self.file_name, "w")
+                    f.write(json.dumps(self.gtrace_json, indent=4))
+                    f.close()
+                    f = open(self.file_name2, "w")
+                    f.write(json.dumps(self.gtrace_json, indent=4))
+                    f.close()
 
-        """try:
-            #future = self._stream.receive()
-            while True:
-                #if self._exit:
-                #    break
-                try:
-                    future = self._stream._send_recieve_thread._sock.listen()
-                    print("\n\n\nTried stream receive\n\n\n\n")
-                    message = future.result(1)
-                    print("\n\n\nTried future result\n\n\n\n")
-                except concurrent.futures.TimeoutError:
-                    continue
-                try:
-
-                    result = self._process(message)
-                    print("\n\n\nTESTER got a msg\n\n\n\n")
-                    # if message was a ping ignore
-                    if result[0] == Message.PING_REQUEST:
-                        continue
-
-                    #self._updates.put(result)
-                    print(str(result))
-
-                except exceptions.ReceiveError as err:
-                    sys.stderr.write("%s", err)
-                    continue
-        except Exception:  # pylint: disable=broad-except
-            sys.stderr.write("Uncaught driver exception")"""
+    @staticmethod
+    def create_GState_from_file() -> GState:
+        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
+        f = open(file_name)
+        content = f.read()
+        #print(content)
+        nstates = jsonpickle.decode(content)
+        nodes = []
+        gstate = GState()
+        for nst in nstates:
+            nstate: NState = jsonpickle.decode(nst,None,None,False,True,False,NState)
+            if nstate.node_id not in nodes:
+                nodes.append(nstate.node_id)
+                gstate.gstate.update({nstate.node_id: nstate})
+        f.close()
+        return gstate
 
     def _process(self, message):
         type_tag = message.message_type
@@ -146,35 +167,3 @@ class GiskardTester:
             content=consensus_pb2.ConsensusNotifyAck().SerializeToString())
 
         return type_tag, data
-
-
-
-    """future = self._stream.send(
-            message_type=Message.CLIENT_BLOCK_GET_BY_TRANSACTION_ID_REQUEST,
-            content=ClientBlockGetByTransactionIdRequest(
-                transaction_id=transaction_id).SerializeToString())
-
-        content = future.result().content
-
-        response = ClientBlockGetResponse()
-        response.ParseFromString(content)
-
-        if response.status == ClientBlockGetResponse.NO_RESOURCE:
-            raise ValueError("The transaction supplied is not in a block")
-
-        block = response.block
-
-        header = BlockHeader()
-        header.ParseFromString(block.header)
-
-        consensus_block = ConsensusBlock(
-            block_id=bytes.fromhex(block.header_signature),
-            previous_id=bytes.fromhex(header.previous_block_id),
-            signer_id=bytes.fromhex(header.signer_public_key),
-            block_num=header.block_num,
-            payload=header.consensus,
-            summary=b'')
-
-        poet_block = PoetBlock(consensus_block)
-
-        return poet_block"""

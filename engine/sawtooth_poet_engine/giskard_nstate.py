@@ -4,7 +4,7 @@ from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_node import GiskardNode
 
 
-class NState:
+class NState(object):
     """State the Giskard node is in"""
 
     def __init__(self, node: GiskardNode = None,  node_view: int = 0, node_id="",
@@ -28,3 +28,11 @@ class NState:
             and self.counting_messages == other.counting_messages \
             and self.out_messages == other.out_messages \
             and self.timeout == other.timeout
+
+    def __str__(self):
+        return ("node_view: " + str(self.node_view) +
+                "node_id: " + self.node_id +
+                "in_messages: " + self.in_messages.__str__() +
+                "counting_messages: " + self.counting_messages.__str__() +
+                "out_messages: " + self.out_messages.__str__() +
+                "timeout: " + self.timeout)

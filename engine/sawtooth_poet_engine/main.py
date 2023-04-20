@@ -114,7 +114,8 @@ def main(args=None):
         driver = ZmqDriver(
             GiskardEngine(
                 path_config=path_config,
-                component_endpoint=opts.component))
+                component_endpoint=opts.component,
+                validator_connect=opts.connect))
 
         driver.start(endpoint=opts.connect)
 

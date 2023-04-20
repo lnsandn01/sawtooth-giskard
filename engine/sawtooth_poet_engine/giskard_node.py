@@ -1,7 +1,7 @@
 from sawtooth_poet_tests.integration_tools import BlockCacheMock
 
 
-class GiskardNode:
+class GiskardNode(object):
     def __init__(self, node_id="", node_view=0, dishonest=False, block_cache=None):
         self.node_id = node_id
         self.node_view = node_view

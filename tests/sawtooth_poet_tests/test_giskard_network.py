@@ -68,7 +68,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.all_serial,
             'rounds': 1,
-            'start_nodes_per_round': 1,
+            'start_nodes_per_round': 3,
             'stop_nodes_per_round': 0,
             'batches': 5,
             'time_between_batches': 1,
@@ -100,16 +100,23 @@ class TestGiskardNetwork(unittest.TestCase):
         poet_kwargs = {} if poet_kwargs is None else poet_kwargs
 
         for round_ in range(rounds):
-            giskard_tester = GiskardTester(0)
+            giskard_tester = GiskardTester(start_nodes_per_round)
             self.start_new_nodes(
                 processors, peering, schedulers,
                 start_nodes_per_round, round_, poet_kwargs)
+            LOGGER.info("\n\nstarted nodes\n\n")
             if round_ == 0:
                 self.send_populate_batch(time_between_batches)
+                LOGGER.info("\n\npopulated batches\n\n")
+                LOGGER.info(GiskardTester.create_GState_from_file().__str__())
             self.send_txns_alternating(batches, time_between_batches)
+            LOGGER.info("\n\nsent batches alternating\n\n")
             self.send_txns_all_at_once(batches, time_between_batches)
+            LOGGER.info("\n\nsent batches\n\n")
             self.assert_consensus()
+            LOGGER.info("\n\nasserted consensus\n\n")
             self.stop_nodes(stop_nodes_per_round)
+            LOGGER.info("\n\nstopped nodes\n\n")
 
         # Attempt to cleanly shutdown all processes
         for node_num in self.nodes:
@@ -183,18 +190,6 @@ class TestGiskardNetwork(unittest.TestCase):
             if proc.returncode is not None:
                 raise subprocess.CalledProcessError(proc.pid, proc.returncode)
         self.nodes[num] = processes
-        # send activation message to engine
-        """address = 'tcp://127.0.0.1:{}'.format(5050 + num)
-        stream = Stream(address)
-        zmq_service = ZmqService(
-                    stream=stream,
-                    timeout=5000)
-        message = Message(
-            message_type=Message.CONSENSUS_NOTIFY_ENGINE_ACTIVATED,
-            correlation_id=self.generate_correlation_id(),
-            content=consensus_pb2.ConsensusNotifyEngineActivated().SerializeToString())
-
-        zmq_service.send_to(b"receiver_id", address, message.SerializeToString())"""
 
         self.clients[num] = IntkeyClient(
             NodeController.http_address(num), WAIT)

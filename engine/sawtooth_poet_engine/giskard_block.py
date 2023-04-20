@@ -3,7 +3,7 @@ from collections import namedtuple
 from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER
 
 
-class Block:
+class Block(object):
     def __init__(self, block_id, previous_id, signer_id, block_num, payload, summary):
         self.block_id = block_id
         self.previous_id = previous_id
@@ -13,7 +13,7 @@ class Block:
         self.summary = summary
 
 
-class GiskardBlock:
+class GiskardBlock(object):
     def __init__(self, block, block_index=0):
         # fields that come with consensus blocks
         self.block_id = block.block_id  # hash of the block -> corresponds to giskard b_h
