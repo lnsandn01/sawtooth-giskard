@@ -22,6 +22,7 @@ import zmq
 from collections import namedtuple
 
 import sawtooth_signing as signing
+from journal.block_wrapper import LAST_BLOCK_INDEX_IDENTIFIER
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
 
@@ -31,7 +32,8 @@ from sawtooth_sdk.consensus import exceptions
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 import sawtooth_sdk.protobuf.consensus_pb2 as consensus_pb2
 
-from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, _BlockCacheProxy, _load_identity_signer
+from sawtooth_poet_engine.oracle import PoetOracle, PoetBlock, _BlockCacheProxy, _BatchPublisherProxy, \
+    _load_identity_signer
 from sawtooth_poet_engine.giskard_block import GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
@@ -47,6 +49,7 @@ class GiskardEngine(Engine):
         Keeps state
         Handles incoming messages, validates blocks
         Proposes new Blocks if it is Proposer in the current view"""
+
     def __init__(self, path_config, component_endpoint, validator_connect):
         # components
         self._path_config = path_config
@@ -66,15 +69,17 @@ class GiskardEngine(Engine):
 
         """ Giskard stuff"""
         self.dishonest = False
-        #if dishonest == "dishonest":
+        # if dishonest == "dishonest":
         #    dishonest = True
-        self._validating_blocks = set()
+        self.is_proposer = False
         self.peers = []
         self.k_peers = len([])
-
         self.node = None
         # original NState from the formal specification
         self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
+        self.block_cache = None
+        self.latest_block_index = 0
+        # connection to GiskardTester, to send state updates
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
@@ -98,14 +103,14 @@ class GiskardEngine(Engine):
 
     @staticmethod
     def tester_endpoint(num):
-        return 'tcp://127.0.0.1:{}'.format(3030+num)
+        return 'tcp://127.0.0.1:{}'.format(3030 + num)
 
     def stop(self):
         self._exit = True
 
     def _initialize_block(self):
         chain_head = self._get_chain_head()
-
+        LOGGER.info("\n\nChain head: " + str(self._get_chain_head().block_num))
         initialize = self._oracle.initialize_block(chain_head)
 
         if initialize:
@@ -195,16 +200,20 @@ class GiskardEngine(Engine):
          so it starts receiving messages"""
         self._service = service
 
-        """self._oracle = PoetOracle(
+        self._oracle = PoetOracle(
             service=service,
             component_endpoint=self._component_endpoint,
             config_dir=self._path_config.config_dir,
             data_dir=self._path_config.data_dir,
-            key_dir=self._path_config.key_dir)"""
+            key_dir=self._path_config.key_dir)
 
         signer = _load_identity_signer(self._path_config.key_dir, 'validator')
         validator_id = signer.get_public_key().as_hex()
-        self.node = GiskardNode(validator_id, 0, self.dishonest)
+        self.peers.append(validator_id)
+        stream = Stream(self._component_endpoint)
+        self.block_cache = _BlockCacheProxy(self._service, stream)
+        _batch_publisher = _BatchPublisherProxy(stream, signer)
+        self.node = GiskardNode(validator_id, 0, self.dishonest, self.block_cache)
         self.nstate = NState(self.node)
         self.socket.send_pyobj(self.nstate)
         """file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/engine_" + validator_id + ".txt"
@@ -222,7 +231,7 @@ class GiskardEngine(Engine):
             Message.CONSENSUS_NOTIFY_BLOCK_INVALID: self._handle_invalid_block,
             Message.CONSENSUS_NOTIFY_BLOCK_COMMIT: self._handle_committed_block,
             Message.CONSENSUS_NOTIFY_PEER_CONNECTED: self._handle_peer_connected,
-            Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED: self._handle_peer_msgs,
+            Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED: self.handle_peer_disconnected,
             Message.CONSENSUS_NOTIFY_PEER_MESSAGE: self._handle_peer_msgs,
             1000: self._handle_prepare_block,
             1001: self._handle_prepare_vote,
@@ -245,7 +254,13 @@ class GiskardEngine(Engine):
                     f.write(str(data) + "\n")
                     f.close()"""
                     try:
+                        LOGGER.info('Received message: %s',
+                                    Message.MessageType.Name(type_tag))
                         handle_message = handlers[type_tag]
+                        if type_tag != Message.CONSENSUS_NOTIFY_PEER_CONNECTED \
+                                and type_tag != Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED \
+                                and type_tag != Message.CONSENSUS_NOTIFY_PEER_MESSAGE:
+                            self.socket.send_pyobj(self.nstate)
                     except KeyError:
                         LOGGER.error('Unknown type tag: %s',
                                      Message.MessageType.Name(type_tag))
@@ -253,9 +268,11 @@ class GiskardEngine(Engine):
                         handle_message(data)
 
                 if self._exit:
+                    self.socket.close()
+                    self.context.destroy()
                     break
 
-                #self._try_to_publish()
+                self._try_to_publish()
             except Exception:  # pylint: disable=broad-except
                 LOGGER.exception("Unhandled exception in message loop")
 
@@ -279,11 +296,17 @@ class GiskardEngine(Engine):
                     self._building = False
 
     def _handle_new_block(self, block):
+        #
+        self.block_cache.pending_blocks.append(block)
+        if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
+                and self.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER:
+            self.nstate, lm = Giskard.propose_block_init_set(self.nstate, None)
+
         block = PoetBlock(block)
         LOGGER.info('Received %s', block)
 
-        self._check_block(block.block_id)
-        self._validating_blocks.add(block.block_id)
+        # self._check_block(block.block_id)
+        # self._validating_blocks.add(block.block_id)
 
     def _handle_valid_block(self, block_id):
         self._validating_blocks.discard(block_id)
@@ -305,7 +328,12 @@ class GiskardEngine(Engine):
         self._fail_block(block.block_id)
 
     def _handle_peer_connected(self, msg):
-        pass
+        self.peers.append(msg.peer_id)
+        self.peers.sort(key=lambda h: int(h, 16))
+
+    def handle_peer_disconnected(self, msg):
+        self.peers.remove(msg.peer_id)
+        self.peers.sort(key=lambda h: int(h, 16))
 
     def _handle_peer_msgs(self, msg):
         # PoET does not care about peer notifications
@@ -362,4 +390,3 @@ class GiskardEngine(Engine):
 
     def _handle_view_change_qc(self, msg):
         pass
-

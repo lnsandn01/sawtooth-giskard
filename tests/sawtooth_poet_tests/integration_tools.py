@@ -241,6 +241,7 @@ class SetSawtoothHome:
 class BlockCacheMock:
     def __init__(self, blocks):
         self.block_store = BlockStoreMock(blocks)
+        self.pending_blocks = []
 
 
 class BlockStoreMock:

@@ -1,145 +1,101 @@
-test_poet_smoke (test_giskard_network.TestGiskardNetwork) ... INFO:test_giskard_network:Starting node 0
+test_giskard_network (test_giskard_network.TestGiskardNetwork) ... INFO:test_giskard_network:Starting node 0
+Traceback (most recent call last):
+  File "/usr/bin/poet-engine", line 11, in <module>
+    load_entry_point('sawtooth-poet-engine==1.1.3', 'console_scripts', 'poet-engine')()
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 480, in load_entry_point
+    return get_distribution(dist).load_entry_point(group, name)
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 2693, in load_entry_point
+    return ep.load()
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 2324, in load
+    return self.resolve()
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 2330, in resolve
+    module = __import__(self.module_name, fromlist=['__name__'], level=0)
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_engine/main.py", line 27, in <module>
+    from sawtooth_poet_engine.engine import GiskardEngine
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_engine/engine.py", line 25, in <module>
+    from journal.block_wrapper import LAST_BLOCK_INDEX_IDENTIFIER
+ModuleNotFoundError: No module named 'journal'
 ======== Running on http://127.0.0.1:8008 ========
 (Press CTRL+C to quit)
-[2023-04-20 15:04:30.927 INFO     engine] socket created tcp://127.0.0.1:3030
-writing file: /tmp/tmppr9zn5w_/keys/validator.priv
-writing file: /tmp/tmppr9zn5w_/keys/validator.pub
-Generated /tmp/tmppr9zn5w_/data/config-genesis.batch
-Writing key state for PoET public key: 03a1ed3e...ddb52442
-Generating /tmp/tmppr9zn5w_/data/poet.batch
-Processing /tmp/tmppr9zn5w_/data/config-genesis.batch...
-Processing /tmp/tmppr9zn5w_/data/config.batch...
-Processing /tmp/tmppr9zn5w_/data/poet.batch...
-Generating /tmp/tmppr9zn5w_/data/genesis.batch
-[2023-04-20 15:04:33.079 WARNING  (unknown file)] [src/pylogger.rs: 40] Started logger at level INFO
-[2023-04-20 15:04:33.367 INFO     path] Skipping path loading from non-existent config file: /tmp/tmppr9zn5w_/etc/path.toml
-[2023-04-20 15:04:33.370 INFO     validator] Skipping validator config loading from non-existent config file: /tmp/tmppr9zn5w_/etc/validator.toml
-[2023-04-20 15:04:33.373 INFO     keys] Loading signing key: /tmp/tmppr9zn5w_/keys/validator.priv
-[2023-04-20 15:04:33.390 INFO     cli] sawtooth-validator (Hyperledger Sawtooth) version 1.2.6
-[2023-04-20 15:04:33.393 INFO     cli] config [path]: config_dir = "/tmp/tmppr9zn5w_/etc"; config [path]: key_dir = "/tmp/tmppr9zn5w_/keys"; config [path]: data_dir = "/tmp/tmppr9zn5w_/data"; config [path]: log_dir = "/tmp/tmppr9zn5w_/logs"; config [path]: policy_dir = "/tmp/tmppr9zn5w_/policy"
-[2023-04-20 15:04:33.396 WARNING  cli] Network key pair is not configured, Network communications between validators will not be authenticated or encrypted.
-[2023-04-20 15:04:33.408 INFO     state_verifier] Skipping state verification: chain head's state root is present
-[2023-04-20 15:04:33.412 INFO     cli] Starting validator with serial scheduler
-[2023-04-20 15:04:33.428 INFO     interconnect] Listening on tcp://127.0.0.1:4004
-[2023-04-20 15:04:33.437 INFO     genesis] Producing genesis block from /tmp/tmppr9zn5w_/data/genesis.batch
-[2023-04-20 15:04:33.441 INFO     processor_manager] waiting for processor type sawtooth_settings: 1.0 to register
-[2023-04-20 15:04:33.478 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: e6d3334c47682011e5c566e9af0444578031e9cdfd516ac711b4f5d0654d56ca7c44ac9e6f6430478336df8aa572328cfcd7dfe067c18f94ed17f42e3ed6180f. Using default max occupancy: 10
-[2023-04-20 15:04:33.481 INFO     processor_handlers] registered transaction processor: connection_id=e6d3334c47682011e5c566e9af0444578031e9cdfd516ac711b4f5d0654d56ca7c44ac9e6f6430478336df8aa572328cfcd7dfe067c18f94ed17f42e3ed6180f, family=sawtooth_settings, version=1.0, namespaces=['000000'], max_occupancy=10
-[2023-04-20 15:04:33.517 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: eec70bc0bc338dd60208c46de46d785a1d259cf63b2324291126c85b9b0ecc7251d9678003f4d67528f7986acd7d000edfb12bc473286cf774dfb92c3d28f219. Using default max occupancy: 10[2023-04-20 15:04:33 INFO    core]
- register attempt: OK[2023-04-20 15:04:33.521 INFO     processor_handlers]
- registered transaction processor: connection_id=eec70bc0bc338dd60208c46de46d785a1d259cf63b2324291126c85b9b0ecc7251d9678003f4d67528f7986acd7d000edfb12bc473286cf774dfb92c3d28f219, family=sawtooth_validator_registry, version=1.0, namespaces=['6a4372'], max_occupancy=10
-[2023-04-20 15:04:33.538 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 41263fd13c287ad24f77f127c7175d1f29a1df3f6f9a043d13ad749da517f6dcc15d44ac38a9cf11d5aeb02da6a0cab4e0a62116bf5612d10bd3cab13351f25a. Using default max occupancy: 10
-[2023-04-20 15:04:33.543 INFO     processor_handlers] registered transaction processor: connection_id=41263fd13c287ad24f77f127c7175d1f29a1df3f6f9a043d13ad749da517f6dcc15d44ac38a9cf11d5aeb02da6a0cab4e0a62116bf5612d10bd3cab13351f25a, family=intkey, version=1.0, namespaces=['1cf126'], max_occupancy=10
-[2023-04-20 15:04:33 INFO    handler] Validator id 03094bcf694e4ebb341b9e7696fe204d39986dd77fdf630957c48eb18c787c52fe was added to the validator_map and set.
-[2023-04-20 15:04:33.667 INFO     genesis] Genesis block created: fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b (block_num:0, state:7fd0dc40e80d076a06548a3fcdcad8e14ba0bf114eb3934de49c892a5b5886d5, previous_block_id:0000000000000000)
-[2023-04-20 15:04:33.674 INFO     interconnect] Listening on tcp://127.0.0.1:5050
-[2023-04-20 15:04:33.679 INFO     interconnect] Listening on tcp://127.0.0.1:8800
-[2023-04-20 15:04:33.684 INFO     ffi] [src/journal/chain.rs: 946] Chain controller initialized with chain head: Block(id: fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b, block_num: 0, state_root_hash: 7fd0dc40e80d076a06548a3fcdcad8e14ba0bf114eb3934de49c892a5b5886d5, previous_block_id: 0000000000000000)
-[2023-04-20 15:04:33.687 INFO     ffi] [src/journal/publisher.rs: 172] Now building on top of block, Block(id: fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b, block_num: 0, state_root_hash: 7fd0dc40e80d076a06548a3fcdcad8e14ba0bf114eb3934de49c892a5b5886d5, previous_block_id: 0000000000000000)
-[2023-04-20 15:04:33.688 INFO     handlers] Consensus engine registered: PoET 0.1 (additional protocols: [name: "poet"
-version: "0.1"
-])
-[2023-04-20 15:04:33.695 INFO     proxy] Consensus engine activated: PoET 0.1
-[2023-04-20 15:04:33.695 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:33.701 INFO     zmq_driver] Received activation message with startup state: StartupInfo(chain_head=block_id: "\372\372i\333\371f7\227\256\027\367\0106\243\374\032t\377\366\315\032\364\304\353\177\305\375\024\346\203\010)}k\210Gd\376\247\324_\374p\252~\336\275\177\314\006\366\316\224\034\010D\306\3547\240\336\257\350k"
-previous_id: "\000\000\000\000\000\000\000\000"
-signer_id: "\003\tK\317iNN\2734\033\236v\226\376 M9\230m\327\177\337c\tW\304\216\261\214x|R\376"
-payload: "Genesis"
-summary: "P\314\0050E\322\367UC\251Q\370\202\317\211_\003>\365\277\235\310\375\177W\323}\255\336@\355\347"
-, peers=[], local_peer_info=peer_id: "\003\tK\317iNN\2734\033\236v\226\376 M9\230m\327\177\337c\tW\304\216\261\214x|R\376"
-)
-[2023-04-20 15:04:33.706 INFO     oracle] Loading signing key: /tmp/tmppr9zn5w_/keys/validator.priv
+writing file: /tmp/tmpjmucxwr6/keys/validator.priv
+writing file: /tmp/tmpjmucxwr6/keys/validator.pub
+Generated /tmp/tmpjmucxwr6/data/config-genesis.batch
+Writing key state for PoET public key: 0262bf24...b734a334
+Generating /tmp/tmpjmucxwr6/data/poet.batch
+Processing /tmp/tmpjmucxwr6/data/config-genesis.batch...
+Processing /tmp/tmpjmucxwr6/data/config.batch...
+Processing /tmp/tmpjmucxwr6/data/poet.batch...
+Generating /tmp/tmpjmucxwr6/data/genesis.batch
+[2023-04-21 15:16:18.402 WARNING  (unknown file)] [src/pylogger.rs: 40] Started logger at level INFO
+[2023-04-21 15:16:18.692 INFO     path] Skipping path loading from non-existent config file: /tmp/tmpjmucxwr6/etc/path.toml
+[2023-04-21 15:16:18.694 INFO     validator] Skipping validator config loading from non-existent config file: /tmp/tmpjmucxwr6/etc/validator.toml
+[2023-04-21 15:16:18.696 INFO     keys] Loading signing key: /tmp/tmpjmucxwr6/keys/validator.priv
+[2023-04-21 15:16:18.713 INFO     cli] sawtooth-validator (Hyperledger Sawtooth) version 1.2.6
+[2023-04-21 15:16:18.715 INFO     cli] config [path]: config_dir = "/tmp/tmpjmucxwr6/etc"; config [path]: key_dir = "/tmp/tmpjmucxwr6/keys"; config [path]: data_dir = "/tmp/tmpjmucxwr6/data"; config [path]: log_dir = "/tmp/tmpjmucxwr6/logs"; config [path]: policy_dir = "/tmp/tmpjmucxwr6/policy"
+[2023-04-21 15:16:18.717 WARNING  cli] Network key pair is not configured, Network communications between validators will not be authenticated or encrypted.
+[2023-04-21 15:16:18.723 INFO     state_verifier] Skipping state verification: chain head's state root is present
+[2023-04-21 15:16:18.725 INFO     cli] Starting validator with parallel scheduler
+[2023-04-21 15:16:18.737 INFO     interconnect] Listening on tcp://127.0.0.1:4004
+[2023-04-21 15:16:18.741 INFO     genesis] Producing genesis block from /tmp/tmpjmucxwr6/data/genesis.batch
+[2023-04-21 15:16:18.746 INFO     processor_manager] waiting for processor type sawtooth_settings: 1.0 to register
+[2023-04-21 15:16:18.799 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 0615ca85dbadb3d269b37f0508973a14984711fe6fbb128f21d259c8f3945a248ae18b6f45be5f7789f1d1fb57cbc17e47ab1a5ca459a2625b07b7d4aedfdbd5. Using default max occupancy: 10
+[2023-04-21 15:16:18.802 INFO     processor_handlers] registered transaction processor: connection_id=0615ca85dbadb3d269b37f0508973a14984711fe6fbb128f21d259c8f3945a248ae18b6f45be5f7789f1d1fb57cbc17e47ab1a5ca459a2625b07b7d4aedfdbd5, family=sawtooth_settings, version=1.0, namespaces=['000000'], max_occupancy=10
+[2023-04-21 15:16:18.841 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 9e7daaaa499c61e294e0bfa80f19096c393e15e431db298d8a2be3d4e18d8f8e780eccd77ebdee1c95b7cec4854b72ab5a88eb56c5422a2966c5b417c6d3de14. Using default max occupancy: 10
+[2023-04-21 15:16:18.851 INFO     processor_handlers] registered transaction processor: connection_id=9e7daaaa499c61e294e0bfa80f19096c393e15e431db298d8a2be3d4e18d8f8e780eccd77ebdee1c95b7cec4854b72ab5a88eb56c5422a2966c5b417c6d3de14, family=intkey, version=1.0, namespaces=['1cf126'], max_occupancy=10
+[2023-04-21 15:16:18 INFO    core] [2023-04-21 15:16:18.853 WARNING  processor_handlers]register attempt: OK 
+Max occupancy was not provided by transaction processor: abe7fc2a1b101e4d9da834541eb27994a83d7099ae7d79ca02411aaeadc6fc9e7175df2f205143fc02568e95b285a8486bd52c65dd510cc71e44b65e2fd070d0. Using default max occupancy: 10
+[2023-04-21 15:16:18.864 INFO     processor_handlers] registered transaction processor: connection_id=abe7fc2a1b101e4d9da834541eb27994a83d7099ae7d79ca02411aaeadc6fc9e7175df2f205143fc02568e95b285a8486bd52c65dd510cc71e44b65e2fd070d0, family=sawtooth_validator_registry, version=1.0, namespaces=['6a4372'], max_occupancy=10
+[2023-04-21 15:16:19 INFO    handler] Validator id 02e466edb56b5bd50070247801189ccc67aa770c497407af0a532c73424dcbb430 was added to the validator_map and set.
+[2023-04-21 15:16:19.051 INFO     genesis] Genesis block created: e7aba9946680e44fd16e1466ce4af1c68cc44ba2f2293724507c1ee6fe4245397c9504a8c0178d706d47c36f8b280b588f6fb32d1e1a5e248deeeb50e0db9479 (block_num:0, state:bc7d7322e6fb6ebcc3f467507f70da4748695cc9d1a8b0fc5a7e5454c89636e5, previous_block_id:0000000000000000)
+[2023-04-21 15:16:19.056 INFO     interconnect] Listening on tcp://127.0.0.1:5050
+[2023-04-21 15:16:19.061 INFO     interconnect] Listening on tcp://127.0.0.1:8800
+[2023-04-21 15:16:19.065 INFO     ffi] [src/journal/chain.rs: 946] Chain controller initialized with chain head: Block(id: e7aba9946680e44fd16e1466ce4af1c68cc44ba2f2293724507c1ee6fe4245397c9504a8c0178d706d47c36f8b280b588f6fb32d1e1a5e248deeeb50e0db9479, block_num: 0, state_root_hash: bc7d7322e6fb6ebcc3f467507f70da4748695cc9d1a8b0fc5a7e5454c89636e5, previous_block_id: 0000000000000000)
+[2023-04-21 15:16:19.067 INFO     ffi] [src/journal/publisher.rs: 172] Now building on top of block, Block(id: e7aba9946680e44fd16e1466ce4af1c68cc44ba2f2293724507c1ee6fe4245397c9504a8c0178d706d47c36f8b280b588f6fb32d1e1a5e248deeeb50e0db9479, block_num: 0, state_root_hash: bc7d7322e6fb6ebcc3f467507f70da4748695cc9d1a8b0fc5a7e5454c89636e5, previous_block_id: 0000000000000000)
 INFO:test_giskard_network:Starting node 1
+Traceback (most recent call last):
+  File "/usr/bin/poet-engine", line 11, in <module>
+    load_entry_point('sawtooth-poet-engine==1.1.3', 'console_scripts', 'poet-engine')()
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 480, in load_entry_point
+    return get_distribution(dist).load_entry_point(group, name)
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 2693, in load_entry_point
+    return ep.load()
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 2324, in load
+    return self.resolve()
+  File "/usr/lib/python3/dist-packages/pkg_resources/__init__.py", line 2330, in resolve
+    module = __import__(self.module_name, fromlist=['__name__'], level=0)
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_engine/main.py", line 27, in <module>
+    from sawtooth_poet_engine.engine import GiskardEngine
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_engine/engine.py", line 25, in <module>
+    from journal.block_wrapper import LAST_BLOCK_INDEX_IDENTIFIER
+ModuleNotFoundError: No module named 'journal'
 ======== Running on http://127.0.0.1:8009 ========
 (Press CTRL+C to quit)
-[2023-04-20 15:04:36.098 INFO     engine] socket created tcp://127.0.0.1:3031
-writing file: /tmp/tmp3dyoc_46/keys/validator.priv
-writing file: /tmp/tmp3dyoc_46/keys/validator.pub
-[2023-04-20 15:04:36.763 WARNING  (unknown file)] [src/pylogger.rs: 40] Started logger at level INFO
-[2023-04-20 15:04:37.052 INFO     path] Skipping path loading from non-existent config file: /tmp/tmp3dyoc_46/etc/path.toml
-[2023-04-20 15:04:37.056 INFO     validator] Skipping validator config loading from non-existent config file: /tmp/tmp3dyoc_46/etc/validator.toml
-[2023-04-20 15:04:37.058 INFO     keys] Loading signing key: /tmp/tmp3dyoc_46/keys/validator.priv
-[2023-04-20 15:04:37.073 INFO     cli] sawtooth-validator (Hyperledger Sawtooth) version 1.2.6
-[2023-04-20 15:04:37.076 INFO     cli] config [path]: config_dir = "/tmp/tmp3dyoc_46/etc"; config [path]: key_dir = "/tmp/tmp3dyoc_46/keys"; config [path]: data_dir = "/tmp/tmp3dyoc_46/data"; config [path]: log_dir = "/tmp/tmp3dyoc_46/logs"; config [path]: policy_dir = "/tmp/tmp3dyoc_46/policy"
-[2023-04-20 15:04:37.078 WARNING  cli] Network key pair is not configured, Network communications between validators will not be authenticated or encrypted.
-[2023-04-20 15:04:37.086 INFO     state_verifier] Skipping state verification: chain head's state root is present
-[2023-04-20 15:04:37.088 INFO     cli] Starting validator with serial scheduler
-[2023-04-20 15:04:37.099 INFO     interconnect] Listening on tcp://127.0.0.1:4005
-[2023-04-20 15:04:37.105 INFO     genesis] No chain head and not the genesis node: starting in peering mode
-[2023-04-20 15:04:37.109 INFO     interconnect] Listening on tcp://127.0.0.1:5051
-[2023-04-20 15:04:37.114 INFO     interconnect] Listening on tcp://127.0.0.1:8801
-[2023-04-20 15:04:37.143 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:37.144 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:37.162 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 4a3c1de2d808326e68b15edc35af183a8e166ac4e8d10522ff334459ae958f4978f316c27d7dfea33b66a0689f08c61481187403adcd6586f323070cf9717796. Using default max occupancy: 10
-[2023-04-20 15:04:37.164 INFO     processor_handlers] registered transaction processor: connection_id=4a3c1de2d808326e68b15edc35af183a8e166ac4e8d10522ff334459ae958f4978f316c27d7dfea33b66a0689f08c61481187403adcd6586f323070cf9717796, family=intkey, version=1.0, namespaces=['1cf126'], max_occupancy=10
-[2023-04-20 15:04:37.172 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 8ce580aac59682bf5d44c45ce4446b475373246cd481621baeca6dab8b66a23380c94f8151f358268e99376e3b204eb4697317f304dc9e580cf8600c92ddeedd. Using default max occupancy: 10
-[2023-04-20 15:04:37.175 INFO     processor_handlers] registered transaction processor: connection_id=8ce580aac59682bf5d44c45ce4446b475373246cd481621baeca6dab8b66a23380c94f8151f358268e99376e3b204eb4697317f304dc9e580cf8600c92ddeedd, family=sawtooth_settings, version=1.0, namespaces=['000000'], max_occupancy=10
-[2023-04-20 15:04:37 INFO    core] register attempt: OK[2023-04-20 15:04:37.187 WARNING  processor_handlers]
- Max occupancy was not provided by transaction processor: 17ea401b493d669673366fa0cb59e6adcc83ecaeaad8a6f51d15c50347a89ef2e4ed99ef0ee71f8939e91056ab71d2e12269e0ec27ecddcab8da78329b5c1864. Using default max occupancy: 10
-[2023-04-20 15:04:37.190 INFO     handlers] Consensus engine registered: PoET 0.1 (additional protocols: [name: "poet"
-version: "0.1"
-])
-[2023-04-20 15:04:37.192 INFO     processor_handlers] registered transaction processor: connection_id=17ea401b493d669673366fa0cb59e6adcc83ecaeaad8a6f51d15c50347a89ef2e4ed99ef0ee71f8939e91056ab71d2e12269e0ec27ecddcab8da78329b5c1864, family=sawtooth_validator_registry, version=1.0, namespaces=['6a4372'], max_occupancy=10
-[2023-04-20 15:04:37 INFO    handler] Validator id 03094bcf694e4ebb341b9e7696fe204d39986dd77fdf630957c48eb18c787c52fe was added to the validator_map and set.
-[2023-04-20 15:04:37.445 INFO     proxy] Consensus engine PoET 0.1 activated as of block fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b
-[2023-04-20 15:04:37.445 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:37.447 INFO     (unknown file)] [src/journal/publisher.rs: 172] Now building on top of block, Block(id: fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b, block_num: 0, state_root_hash: 7fd0dc40e80d076a06548a3fcdcad8e14ba0bf114eb3934de49c892a5b5886d5, previous_block_id: 0000000000000000)
-[2023-04-20 15:04:37.451 INFO     zmq_driver] Received activation message with startup state: StartupInfo(chain_head=block_id: "\372\372i\333\371f7\227\256\027\367\0106\243\374\032t\377\366\315\032\364\304\353\177\305\375\024\346\203\010)}k\210Gd\376\247\324_\374p\252~\336\275\177\314\006\366\316\224\034\010D\306\3547\240\336\257\350k"
-previous_id: "\000\000\000\000\000\000\000\000"
-signer_id: "\003\tK\317iNN\2734\033\236v\226\376 M9\230m\327\177\337c\tW\304\216\261\214x|R\376"
-payload: "Genesis"
-summary: "P\314\0050E\322\367UC\251Q\370\202\317\211_\003>\365\277\235\310\375\177W\323}\255\336@\355\347"
-, peers=[peer_id: "\003\tK\317iNN\2734\033\236v\226\376 M9\230m\327\177\337c\tW\304\216\261\214x|R\376"
-], local_peer_info=peer_id: "\003\021\362I*\013\263@\r\212_t\030\257\002\nA\254c\331\305\3700/3\020\223\320I\t\364\357\025"
-)
-[2023-04-20 15:04:37.456 INFO     oracle] Loading signing key: /tmp/tmp3dyoc_46/keys/validator.priv
-INFO:test_giskard_network:Starting node 2
-======== Running on http://127.0.0.1:8010 ========
-(Press CTRL+C to quit)
-[2023-04-20 15:04:39.663 INFO     engine] socket created tcp://127.0.0.1:3032
-writing file: /tmp/tmpzud67ibu/keys/validator.priv
-writing file: /tmp/tmpzud67ibu/keys/validator.pub
-[2023-04-20 15:04:40.331 WARNING  (unknown file)] [src/pylogger.rs: 40] Started logger at level INFO
-[2023-04-20 15:04:40.615 INFO     path] Skipping path loading from non-existent config file: /tmp/tmpzud67ibu/etc/path.toml
-[2023-04-20 15:04:40.619 INFO     validator] Skipping validator config loading from non-existent config file: /tmp/tmpzud67ibu/etc/validator.toml
-[2023-04-20 15:04:40.622 INFO     keys] Loading signing key: /tmp/tmpzud67ibu/keys/validator.priv
-[2023-04-20 15:04:40.639 INFO     cli] sawtooth-validator (Hyperledger Sawtooth) version 1.2.6
-[2023-04-20 15:04:40.642 INFO     cli] config [path]: config_dir = "/tmp/tmpzud67ibu/etc"; config [path]: key_dir = "/tmp/tmpzud67ibu/keys"; config [path]: data_dir = "/tmp/tmpzud67ibu/data"; config [path]: log_dir = "/tmp/tmpzud67ibu/logs"; config [path]: policy_dir = "/tmp/tmpzud67ibu/policy"
-[2023-04-20 15:04:40.644 WARNING  cli] Network key pair is not configured, Network communications between validators will not be authenticated or encrypted.
-[2023-04-20 15:04:40.651 INFO     state_verifier] Skipping state verification: chain head's state root is present
-[2023-04-20 15:04:40.654 INFO     cli] Starting validator with serial scheduler
-[2023-04-20 15:04:40.667 INFO     interconnect] Listening on tcp://127.0.0.1:4006
-[2023-04-20 15:04:40.673 INFO     genesis] No chain head and not the genesis node: starting in peering mode
-[2023-04-20 15:04:40.678 INFO     interconnect] Listening on tcp://127.0.0.1:5052
-[2023-04-20 15:04:40.684 INFO     interconnect] Listening on tcp://127.0.0.1:8802
-[2023-04-20 15:04:40.720 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:40.722 INFO     notifier] [2023-04-20 15:04:40.723 INFO     notifier]appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
- appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:40.729 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:40.744 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 52d1bd399d6fcdba8909133b8fa279df226bfe199904af0ffd51e1c08fb64d4c1f9deb68c814e4224a02b629f0dd1f6c07363a7ef7159a1a9e7d7ee74c7ff22f. Using default max occupancy: 10[2023-04-20 15:04:40 INFO    core]
- [2023-04-20 15:04:40.748 INFO     processor_handlers]register attempt: OK 
-registered transaction processor: connection_id=52d1bd399d6fcdba8909133b8fa279df226bfe199904af0ffd51e1c08fb64d4c1f9deb68c814e4224a02b629f0dd1f6c07363a7ef7159a1a9e7d7ee74c7ff22f, family=sawtooth_validator_registry, version=1.0, namespaces=['6a4372'], max_occupancy=10
-[2023-04-20 15:04:40.804 INFO     handlers] Consensus engine registered: PoET 0.1 (additional protocols: [name: "poet"
-version: "0.1"
-])
-[2023-04-20 15:04:40.806 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: e0febab2904aa5372a80dff47dee74c2aec518ad62f0d6efae2fc2c73adc24d39d48c83b345bb55ad91373d9358cadcca9866e7745b23aacc8284c7fc958dad8. Using default max occupancy: 10
-[2023-04-20 15:04:40.807 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: c4c85c322f4306b3ff10f6eb89d45668dc386368350f2582b02c580deff488840348cc979513da26c515f5f47ecadddd8c8f03a71de856181ca6bddbbae00b4c. Using default max occupancy: 10
-[2023-04-20 15:04:40.812 INFO     processor_handlers] registered transaction processor: connection_id=e0febab2904aa5372a80dff47dee74c2aec518ad62f0d6efae2fc2c73adc24d39d48c83b345bb55ad91373d9358cadcca9866e7745b23aacc8284c7fc958dad8, family=sawtooth_settings, version=1.0, namespaces=['000000'], max_occupancy=10
-[2023-04-20 15:04:40.814 INFO     processor_handlers] registered transaction processor: connection_id=c4c85c322f4306b3ff10f6eb89d45668dc386368350f2582b02c580deff488840348cc979513da26c515f5f47ecadddd8c8f03a71de856181ca6bddbbae00b4c, family=intkey, version=1.0, namespaces=['1cf126'], max_occupancy=10
-[2023-04-20 15:04:41 INFO    handler] Validator id 03094bcf694e4ebb341b9e7696fe204d39986dd77fdf630957c48eb18c787c52fe was added to the validator_map and set.
-[2023-04-20 15:04:41.059 INFO     proxy] Consensus engine PoET 0.1 activated as of block fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b
-[2023-04-20 15:04:41.059 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
-[2023-04-20 15:04:41.062 INFO     (unknown file)] [src/journal/publisher.rs: 172] Now building on top of block, Block(id: fafa69dbf9663797ae17f70836a3fc1a74fff6cd1af4c4eb7fc5fd14e68308297d6b884764fea7d45ffc70aa7edebd7fcc06f6ce941c0844c6ec37a0deafe86b, block_num: 0, state_root_hash: 7fd0dc40e80d076a06548a3fcdcad8e14ba0bf114eb3934de49c892a5b5886d5, previous_block_id: 0000000000000000)
-[2023-04-20 15:04:41.066 INFO     zmq_driver] Received activation message with startup state: StartupInfo(chain_head=block_id: "\372\372i\333\371f7\227\256\027\367\0106\243\374\032t\377\366\315\032\364\304\353\177\305\375\024\346\203\010)}k\210Gd\376\247\324_\374p\252~\336\275\177\314\006\366\316\224\034\010D\306\3547\240\336\257\350k"
-previous_id: "\000\000\000\000\000\000\000\000"
-signer_id: "\003\tK\317iNN\2734\033\236v\226\376 M9\230m\327\177\337c\tW\304\216\261\214x|R\376"
-payload: "Genesis"
-summary: "P\314\0050E\322\367UC\251Q\370\202\317\211_\003>\365\277\235\310\375\177W\323}\255\336@\355\347"
-, peers=[peer_id: "\003\tK\317iNN\2734\033\236v\226\376 M9\230m\327\177\337c\tW\304\216\261\214x|R\376"
-, peer_id: "\003\021\362I*\013\263@\r\212_t\030\257\002\nA\254c\331\305\3700/3\020\223\320I\t\364\357\025"
-], local_peer_info=peer_id: "\002\316\023\215=\221\ts\3520\225t\254\242\237\221\253?\024\357\243\014\331\3633\311\255;\263i\231-~"
-)
-[2023-04-20 15:04:41.071 INFO     oracle] Loading signing key: /tmp/tmpzud67ibu/keys/validator.priv
+writing file: /tmp/tmp1cv64ogb/keys/validator.priv
+writing file: /tmp/tmp1cv64ogb/keys/validator.pub
+[2023-04-21 15:16:22.605 WARNING  (unknown file)] [src/pylogger.rs: 40] Started logger at level INFO
+[2023-04-21 15:16:22.879 INFO     path] Skipping path loading from non-existent config file: /tmp/tmp1cv64ogb/etc/path.toml
+[2023-04-21 15:16:22.881 INFO     validator] Skipping validator config loading from non-existent config file: /tmp/tmp1cv64ogb/etc/validator.toml
+[2023-04-21 15:16:22.884 INFO     keys] Loading signing key: /tmp/tmp1cv64ogb/keys/validator.priv
+[2023-04-21 15:16:22.898 INFO     cli] sawtooth-validator (Hyperledger Sawtooth) version 1.2.6
+[2023-04-21 15:16:22.901 INFO     cli] config [path]: config_dir = "/tmp/tmp1cv64ogb/etc"; config [path]: key_dir = "/tmp/tmp1cv64ogb/keys"; config [path]: data_dir = "/tmp/tmp1cv64ogb/data"; config [path]: log_dir = "/tmp/tmp1cv64ogb/logs"; config [path]: policy_dir = "/tmp/tmp1cv64ogb/policy"
+[2023-04-21 15:16:22.903 WARNING  cli] Network key pair is not configured, Network communications between validators will not be authenticated or encrypted.
+[2023-04-21 15:16:22.911 INFO     state_verifier] Skipping state verification: chain head's state root is present
+[2023-04-21 15:16:22.913 INFO     cli] Starting validator with serial scheduler
+[2023-04-21 15:16:22.931 INFO     interconnect] Listening on tcp://127.0.0.1:4005
+[2023-04-21 15:16:22.938 INFO     genesis] No chain head and not the genesis node: starting in peering mode
+[2023-04-21 15:16:22.940 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 37ed653a88470b29258c6909ae5a55d01c7ac80316f8692023cb3dbb3c7d6bff48a0fd2b4f35075370b2d48a22735a31e3dbc631c5fc044b9a146cebb6058024. Using default max occupancy: 10
+[2023-04-21 15:16:22.946 INFO     interconnect] Listening on tcp://127.0.0.1:5051
+[2023-04-21 15:16:22.948 INFO     processor_handlers] registered transaction processor: connection_id=37ed653a88470b29258c6909ae5a55d01c7ac80316f8692023cb3dbb3c7d6bff48a0fd2b4f35075370b2d48a22735a31e3dbc631c5fc044b9a146cebb6058024, family=sawtooth_settings, version=1.0, namespaces=['000000'], max_occupancy=10
+[2023-04-21 15:16:22.955 INFO     interconnect] Listening on tcp://127.0.0.1:8801
+[2023-04-21 15:16:22.995 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
+[2023-04-21 15:16:22.998 INFO     notifier] appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
+[2023-04-21 15:16:23 INFO    core][2023-04-21 15:16:23.032 WARNING  processor_handlers]  register attempt: OKMax occupancy was not provided by transaction processor: f30444cf853126ed103c2818b8ff8e267c91ac0c784b4148fc3af2f56a340b5bd9b8044fd03598eb6ef81abf5ce8da2bd3d35366fec06cd75f2303a3b0411e26. Using default max occupancy: 10
+
+[2023-04-21 15:16:23.036 INFO     processor_handlers] registered transaction processor: connection_id=f30444cf853126ed103c2818b8ff8e267c91ac0c784b4148fc3af2f56a340b5bd9b8044fd03598eb6ef81abf5ce8da2bd3d35366fec06cd75f2303a3b0411e26, family=sawtooth_validator_registry, version=1.0, namespaces=['6a4372'], max_occupancy=10
+[2023-04-21 15:16:23.081 WARNING  processor_handlers] Max occupancy was not provided by transaction processor: 036d5033945c008d71a7b17fc84a80158c53de271adedc6e816e96e6e449c8d8e957b456138f184f5bb3b10e46ecb8d343dbed96240328a7248525583f25599e. Using default max occupancy: 10
+[2023-04-21 15:16:23.084 INFO     processor_handlers] registered transaction processor: connection_id=036d5033945c008d71a7b17fc84a80158c53de271adedc6e816e96e6e449c8d8e957b456138f184f5bb3b10e46ecb8d343dbed96240328a7248525583f25599e, family=intkey, version=1.0, namespaces=['1cf126'], max_occupancy=10
+[2023-04-21 15:16:23 INFO    handler] Validator id 02e466edb56b5bd50070247801189ccc67aa770c497407af0a532c73424dcbb430 was added to the validator_map and set.
+[2023-04-21 15:16:23.290 INFO     (unknown file)] [src/journal/publisher.rs: 172] Now building on top of block, Block(id: e7aba9946680e44fd16e1466ce4af1c68cc44ba2f2293724507c1ee6fe4245397c9504a8c0178d706d47c36f8b280b588f6fb32d1e1a5e248deeeb50e0db9479, block_num: 0, state_root_hash: bc7d7322e6fb6ebcc3f467507f70da4748695cc9d1a8b0fc5a7e5454c89636e5, previous_block_id: 0000000000000000)
 INFO:test_giskard_network:
 
 started nodes
@@ -151,364 +107,37 @@ INFO:test_giskard_network:
 populated batches
 
 
-INFO:test_giskard_network:{'03094bcf694e4ebb341b9e7696fe204d39986dd77fdf630957c48eb18c787c52fe': <sawtooth_poet_engine.giskard_nstate.NState object at 0x7fc17e5b8358>, '0311f2492a0bb3400d8a5f7418af020a41ac63d9c5f8302f331093d04909f4ef15': <sawtooth_poet_engine.giskard_nstate.NState object at 0x7fc17e5b8320>, '02ce138d3d910973ea309574aca29f91ab3f14efa30cd9f333c9ad3bb369992d7e': <sawtooth_poet_engine.giskard_nstate.NState object at 0x7fc17e5b8860>}[]
-INFO:test_giskard_network:Sending batch 0 @ http://127.0.0.1:8008
-INFO:test_giskard_network:Sending batch 0 @ http://127.0.0.1:8009
-INFO:test_giskard_network:Sending batch 0 @ http://127.0.0.1:8010
-INFO:test_giskard_network:Sending batch 1 @ http://127.0.0.1:8008
-INFO:test_giskard_network:Sending batch 1 @ http://127.0.0.1:8009
-INFO:test_giskard_network:Sending batch 1 @ http://127.0.0.1:8010
-INFO:test_giskard_network:Sending batch 2 @ http://127.0.0.1:8008
-INFO:test_giskard_network:Sending batch 2 @ http://127.0.0.1:8009
-INFO:test_giskard_network:Sending batch 2 @ http://127.0.0.1:8010
-INFO:test_giskard_network:Sending batch 3 @ http://127.0.0.1:8008
-INFO:test_giskard_network:Sending batch 3 @ http://127.0.0.1:8009
-INFO:test_giskard_network:Sending batch 3 @ http://127.0.0.1:8010
-INFO:test_giskard_network:Sending batch 4 @ http://127.0.0.1:8008
-INFO:test_giskard_network:Sending batch 4 @ http://127.0.0.1:8009
-INFO:test_giskard_network:Sending batch 4 @ http://127.0.0.1:8010
-[2023-04-20 15:04:53.682 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 3309be9fa571bfa717544602bd877d88362e780379344aefff3971652e465ec18b123393154dda50ba0105e9af7ead6127323062d4a7bffe2e7760b1d632b4df but have no handler for that type
-[2023-04-20 15:04:57.125 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 144e905cd66c0c94c4c7b7608bb38effa062e5935298b81d74ddf689701fb7501180f93df39021b5e26f9abb5d05ae242010137f7909b3bd5bc347eb781138e6 but have no handler for that type
-[2023-04-20 15:05:00.703 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 9efe786df82f606d6451a39b246f9ddba7e4dd5eda57338bd2a8450453e89897974b89af31b82c4aba4ce0202bdfe1ce4d372a988278cf24fe312ff23236b013 but have no handler for that type
-[2023-04-20 15:05:03.694 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 3309be9fa571bfa717544602bd877d88362e780379344aefff3971652e465ec18b123393154dda50ba0105e9af7ead6127323062d4a7bffe2e7760b1d632b4df but have no handler for that type
-[2023-04-20 15:05:07.134 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 144e905cd66c0c94c4c7b7608bb38effa062e5935298b81d74ddf689701fb7501180f93df39021b5e26f9abb5d05ae242010137f7909b3bd5bc347eb781138e6 but have no handler for that type
-[2023-04-20 15:05:10.709 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 9efe786df82f606d6451a39b246f9ddba7e4dd5eda57338bd2a8450453e89897974b89af31b82c4aba4ce0202bdfe1ce4d372a988278cf24fe312ff23236b013 but have no handler for that type
-[2023-04-20 15:05:13.703 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 3309be9fa571bfa717544602bd877d88362e780379344aefff3971652e465ec18b123393154dda50ba0105e9af7ead6127323062d4a7bffe2e7760b1d632b4df but have no handler for that type
-[2023-04-20 15:05:17.145 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 144e905cd66c0c94c4c7b7608bb38effa062e5935298b81d74ddf689701fb7501180f93df39021b5e26f9abb5d05ae242010137f7909b3bd5bc347eb781138e6 but have no handler for that type
-[2023-04-20 15:05:20.718 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 9efe786df82f606d6451a39b246f9ddba7e4dd5eda57338bd2a8450453e89897974b89af31b82c4aba4ce0202bdfe1ce4d372a988278cf24fe312ff23236b013 but have no handler for that type
-[2023-04-20 15:05:23.713 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 3309be9fa571bfa717544602bd877d88362e780379344aefff3971652e465ec18b123393154dda50ba0105e9af7ead6127323062d4a7bffe2e7760b1d632b4df but have no handler for that type
-[2023-04-20 15:05:27.154 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 144e905cd66c0c94c4c7b7608bb38effa062e5935298b81d74ddf689701fb7501180f93df39021b5e26f9abb5d05ae242010137f7909b3bd5bc347eb781138e6 but have no handler for that type
-[2023-04-20 15:05:30.728 INFO     dispatch] received a message of type CONSENSUS_NOTIFY_ACK from 9efe786df82f606d6451a39b246f9ddba7e4dd5eda57338bd2a8450453e89897974b89af31b82c4aba4ce0202bdfe1ce4d372a988278cf24fe312ff23236b013 but have no handler for that type
-[2023-04-20 15:05:31.714 INFO     cli][2023-04-20 15:05:31.714 INFO     cli][2023-04-20 15:05:31.714 INFO     cli]
+ERROR
+
+======================================================================
+ERROR: test_giskard_network (test_giskard_network.TestGiskardNetwork)
 ----------------------------------------------------------------------
-Ran 1 test in 61.311s
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py", line 57, in test_giskard_network
+    'ztest_minimum_win_count': 3,
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py", line 111, in _run_giskard_network_test
+    LOGGER.info(GiskardTester.create_GState_from_file().__str__())
+  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/giskard_tester.py", line 97, in create_GState_from_file
+    nstates = jsonpickle.decode(content)
+  File "/home/lnsandn/.local/lib/python3.6/site-packages/jsonpickle/unpickler.py", line 84, in decode
+    data = backend.decode(string)
+  File "/home/lnsandn/.local/lib/python3.6/site-packages/jsonpickle/backend.py", line 72, in decode
+    raise e
+  File "/home/lnsandn/.local/lib/python3.6/site-packages/jsonpickle/backend.py", line 69, in decode
+    return self.backend_decode(name, string)
+  File "/home/lnsandn/.local/lib/python3.6/site-packages/jsonpickle/backend.py", line 225, in backend_decode
+    return self._decoders[name](string, *optargs, **decoder_kwargs)
+  File "/usr/lib/python3.6/json/__init__.py", line 354, in loads
+    return _default_decoder.decode(s)
+  File "/usr/lib/python3.6/json/decoder.py", line 339, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+  File "/usr/lib/python3.6/json/decoder.py", line 357, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
 
-OK
-[2023-04-20 15:05:31.716 ERROR    rest_api][2023-04-20 15:05:31.716 ERROR    rest_api][2023-04-20 15:05:31.717 ERROR    rest_api]  Initiating graceful shutdown (press Ctrl+C again to force)init tester
+----------------------------------------------------------------------
+Ran 1 test in 9.446s
+
+FAILED (errors=1)
+init tester
 tester bound sockets
-    object NoneType can't be used in 'await' expression
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_rest_api/rest_api.py", line 249, in main
-    client_max_size=rest_api_config.client_max_size)
-  File "/usr/lib/python3/dist-packages/sawtooth_rest_api/rest_api.py", line 143, in start_rest_api
-    access_log_format='%r: %s status, %b size, in %Tf s')
-  File "/usr/lib/python3/dist-packages/aiohttp/web.py", line 118, in run_app
-    loop.run_until_complete(runner.cleanup())
-  File "/usr/lib/python3.6/asyncio/base_events.py", line 484, in run_until_complete
-    return future.result()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_runner.py", line 189, in cleanup
-    await self._cleanup_server()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_runner.py", line 270, in _cleanup_server
-    await self._app.cleanup()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_app.py", line 263, in cleanup
-    await self.on_cleanup.send(self)
-  File "/usr/lib/python3/dist-packages/aiohttp/signals.py", line 35, in send
-    await receiver(*args, **kwargs)
-TypeError: object NoneType can't be used in 'await' expressionInitiating graceful shutdown (press Ctrl+C again to force)
-object NoneType can't be used in 'await' expression
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_rest_api/rest_api.py", line 249, in main
-    client_max_size=rest_api_config.client_max_size)
-  File "/usr/lib/python3/dist-packages/sawtooth_rest_api/rest_api.py", line 143, in start_rest_api
-    access_log_format='%r: %s status, %b size, in %Tf s')
-  File "/usr/lib/python3/dist-packages/aiohttp/web.py", line 118, in run_app
-    loop.run_until_complete(runner.cleanup())
-  File "/usr/lib/python3.6/asyncio/base_events.py", line 484, in run_until_complete
-    return future.result()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_runner.py", line 189, in cleanup
-    await self._cleanup_server()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_runner.py", line 270, in _cleanup_server
-    await self._app.cleanup()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_app.py", line 263, in cleanup
-    await self.on_cleanup.send(self)
-  File "/usr/lib/python3/dist-packages/aiohttp/signals.py", line 35, in send
-    await receiver(*args, **kwargs)
-TypeError: object NoneType can't be used in 'await' expressionInitiating graceful shutdown (press Ctrl+C again to force)object NoneType can't be used in 'await' expression
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_rest_api/rest_api.py", line 249, in main
-    client_max_size=rest_api_config.client_max_size)
-  File "/usr/lib/python3/dist-packages/sawtooth_rest_api/rest_api.py", line 143, in start_rest_api
-    access_log_format='%r: %s status, %b size, in %Tf s')
-  File "/usr/lib/python3/dist-packages/aiohttp/web.py", line 118, in run_app
-    loop.run_until_complete(runner.cleanup())
-  File "/usr/lib/python3.6/asyncio/base_events.py", line 484, in run_until_complete
-    return future.result()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_runner.py", line 189, in cleanup
-    await self._cleanup_server()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_runner.py", line 270, in _cleanup_server
-    await self._app.cleanup()
-  File "/usr/lib/python3/dist-packages/aiohttp/web_app.py", line 263, in cleanup
-    await self.on_cleanup.send(self)
-  File "/usr/lib/python3/dist-packages/aiohttp/signals.py", line 35, in send
-    await receiver(*args, **kwargs)
-TypeError: object NoneType can't be used in 'await' expression
-
-
-
-
-[2023-04-20 15:05:31.723 INFO     processor_handlers][2023-04-20 15:05:31.725 INFO     processor_handlers] try to unregister all transaction processor capabilities for connection_id 4a3c1de2d808326e68b15edc35af183a8e166ac4e8d10522ff334459ae958f4978f316c27d7dfea33b66a0689f08c61481187403adcd6586f323070cf9717796
- [2023-04-20 15:05:31.726 INFO     processor_handlers][2023-04-20 15:05:31.718 INFO     processor_handlers]try to unregister all transaction processor capabilities for connection_id c4c85c322f4306b3ff10f6eb89d45668dc386368350f2582b02c580deff488840348cc979513da26c515f5f47ecadddd8c8f03a71de856181ca6bddbbae00b4c try to unregister all transaction processor capabilities for connection_id 17ea401b493d669673366fa0cb59e6adcc83ecaeaad8a6f51d15c50347a89ef2e4ed99ef0ee71f8939e91056ab71d2e12269e0ec27ecddcab8da78329b5c1864
- 
-[2023-04-20 15:05:31.725 INFO     processor_handlers] try to unregister all transaction processor capabilities for connection_id 41263fd13c287ad24f77f127c7175d1f29a1df3f6f9a043d13ad749da517f6dcc15d44ac38a9cf11d5aeb02da6a0cab4e0a62116bf5612d10bd3cab13351f25a[2023-04-20 15:05:31.742 INFO     processor_handlers]try to unregister all transaction processor capabilities for connection_id 52d1bd399d6fcdba8909133b8fa279df226bfe199904af0ffd51e1c08fb64d4c1f9deb68c814e4224a02b629f0dd1f6c07363a7ef7159a1a9e7d7ee74c7ff22f
- 
-[2023-04-20 15:05:31.726 INFO     processor_handlers]try to unregister all transaction processor capabilities for connection_id 8ce580aac59682bf5d44c45ce4446b475373246cd481621baeca6dab8b66a23380c94f8151f358268e99376e3b204eb4697317f304dc9e580cf8600c92ddeedd [2023-04-20 15:05:31.739 INFO     processor_handlers]
-try to unregister all transaction processor capabilities for connection_id eec70bc0bc338dd60208c46de46d785a1d259cf63b2324291126c85b9b0ecc7251d9678003f4d67528f7986acd7d000edfb12bc473286cf774dfb92c3d28f219 [2023-04-20 15:05:31.746 WARNING  dispatch]
-try to unregister all transaction processor capabilities for connection_id e0febab2904aa5372a80dff47dee74c2aec518ad62f0d6efae2fc2c73adc24d39d48c83b345bb55ad91373d9358cadcca9866e7745b23aacc8284c7fc958dad8 
-[2023-04-20 15:05:31.743 INFO     notifier]Attempted to remove send_message function for connection OutboundConnectionThread-tcp://127.0.0.1:8800, but no send_message function was registered[2023-04-20 15:05:31.747 INFO     notifier] 
- appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED[2023-04-20 15:05:31.746 WARNING  dispatch]appending CONSENSUS_NOTIFY_ENGINE_ACTIVATED
- 
-[2023-04-20 15:05:31.749 WARNING  dispatch]Attempted to remove send_message function for connection ServerThread, but no send_message function was registered[2023-04-20 15:05:31.749 WARNING  dispatch]  
-Attempted to remove send_message function for connection OutboundConnectionThread-tcp://127.0.0.1:8800, but no send_message function was registeredAttempted to remove send_message function for connection ServerThread, but no send_message function was registered[2023-04-20 15:05:31.754 WARNING  dispatch] 
-
-Attempted to remove send_message function for connection ServerThread, but no send_message function was registered[2023-04-20 15:05:31.760 WARNING  dispatch][2023-04-20 15:05:31.750 WARNING  dispatch]
-  [2023-04-20 15:05:31.758 WARNING  dispatch]Can't send message TP_UNREGISTER_RESPONSE back to 41263fd13c287ad24f77f127c7175d1f29a1df3f6f9a043d13ad749da517f6dcc15d44ac38a9cf11d5aeb02da6a0cab4e0a62116bf5612d10bd3cab13351f25a because connection ServerThread not in dispatcherCan't send message NETWORK_ACK back to 35ba423db4b483a3f5e2beab3e8d2565c2df9b097fb9e35fcec2a8144de92bfc9c0f3771a59cccc2743bdb3fa68c4d63b5e0184b7fa7a5ed022328a18fdc89d7 because connection OutboundConnectionThread-tcp://127.0.0.1:8801 not in dispatcher 
-
-Can't send message TP_UNREGISTER_RESPONSE back to 17ea401b493d669673366fa0cb59e6adcc83ecaeaad8a6f51d15c50347a89ef2e4ed99ef0ee71f8939e91056ab71d2e12269e0ec27ecddcab8da78329b5c1864 because connection ServerThread not in dispatcher[2023-04-20 15:05:31.766 WARNING  dispatch][2023-04-20 15:05:31.751 WARNING  dispatch]
-  [2023-04-20 15:05:31.764 WARNING  dispatch] Can't send message TP_UNREGISTER_RESPONSE back to eec70bc0bc338dd60208c46de46d785a1d259cf63b2324291126c85b9b0ecc7251d9678003f4d67528f7986acd7d000edfb12bc473286cf774dfb92c3d28f219 because connection ServerThread not in dispatcherAttempted to remove send_message function for connection OutboundConnectionThread-tcp://127.0.0.1:8801, but no send_message function was registeredCan't send message TP_UNREGISTER_RESPONSE back to 8ce580aac59682bf5d44c45ce4446b475373246cd481621baeca6dab8b66a23380c94f8151f358268e99376e3b204eb4697317f304dc9e580cf8600c92ddeedd because connection ServerThread not in dispatcher
-
-
-[2023-04-20 15:05:31.776 WARNING  dispatch][2023-04-20 15:05:31.756 WARNING  dispatch][2023-04-20 15:05:31.772 WARNING  dispatch]   Attempted to remove send_message function for connection ServerThread, but no send_message function was registeredCan't send message TP_UNREGISTER_RESPONSE back to c4c85c322f4306b3ff10f6eb89d45668dc386368350f2582b02c580deff488840348cc979513da26c515f5f47ecadddd8c8f03a71de856181ca6bddbbae00b4c because connection ServerThread not in dispatcherAttempted to remove send_last_message function for connection OutboundConnectionThread-tcp://127.0.0.1:8800, but no send_last_message function was registered
-
-
-[2023-04-20 15:05:31.785 WARNING  dispatch][2023-04-20 15:05:31.761 WARNING  dispatch][2023-04-20 15:05:31.780 WARNING  dispatch]   Attempted to remove send_last_message function for connection ServerThread, but no send_last_message function was registeredCan't send message TP_UNREGISTER_RESPONSE back to 52d1bd399d6fcdba8909133b8fa279df226bfe199904af0ffd51e1c08fb64d4c1f9deb68c814e4224a02b629f0dd1f6c07363a7ef7159a1a9e7d7ee74c7ff22f because connection ServerThread not in dispatcherAttempted to remove send_last_message function for connection ServerThread, but no send_last_message function was registered
-
-
-[2023-04-20 15:05:31.809 WARNING  dispatch][2023-04-20 15:05:31.768 WARNING  dispatch][2023-04-20 15:05:31.788 WARNING  dispatch]   Attempted to remove send_last_message function for connection ServerThread, but no send_last_message function was registeredCan't send message TP_UNREGISTER_RESPONSE back to e0febab2904aa5372a80dff47dee74c2aec518ad62f0d6efae2fc2c73adc24d39d48c83b345bb55ad91373d9358cadcca9866e7745b23aacc8284c7fc958dad8 because connection ServerThread not in dispatcherAttempted to remove send_last_message function for connection ServerThread, but no send_last_message function was registered
-
-
-[2023-04-20 15:05:31.777 WARNING  dispatch] Attempted to remove send_message function for connection ServerThread, but no send_message function was registered[2023-04-20 15:05:31.826 ERROR    base_events][2023-04-20 15:05:31 ERROR   base_events][2023-04-20 15:05:31.827 ERROR    base_events]
-   [2023-04-20 15:05:31.784 WARNING  dispatch]Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledErrorTask exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledErrorTask exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError 
-
-
-Attempted to remove send_last_message function for connection OutboundConnectionThread-tcp://127.0.0.1:8800, but no send_last_message function was registered[2023-04-20 15:05:31 INFO    core]
- [2023-04-20 15:05:31.837 ERROR    zmq_driver][2023-04-20 15:05:31.801 WARNING  dispatch]during waiting for response on unregistration: the connection to the validator was lost  
-Uncaught driver exception
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_sdk/consensus/zmq_driver.py", line 89, in _driver_loop
-    result = self._process(message)
-  File "/usr/lib/python3/dist-packages/sawtooth_sdk/consensus/zmq_driver.py", line 186, in _process
-    type_tag = message.message_type
-AttributeError: 'int' object has no attribute 'message_type'Attempted to remove send_last_message function for connection OutboundConnectionThread-tcp://127.0.0.1:8801, but no send_last_message function was registered
-
-[2023-04-20 15:05:31.830 WARNING  dispatch] Attempted to remove send_last_message function for connection ServerThread, but no send_last_message function was registered
-[2023-04-20 15:05:31.846 ERROR    base_events] Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError
-[2023-04-20 15:05:31.850 ERROR    zmq_driver] Uncaught driver exception
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_sdk/consensus/zmq_driver.py", line 89, in _driver_loop
-    result = self._process(message)
-  File "/usr/lib/python3/dist-packages/sawtooth_sdk/consensus/zmq_driver.py", line 186, in _process
-    type_tag = message.message_type
-AttributeError: 'int' object has no attribute 'message_type'
-Exception ignored in: <module 'threading' from '/usr/lib/python3.6/threading.py'>Exception ignored in: Exception ignored in: [2023-04-20 15:05:32.072 ERROR    (unknown file)]Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/urllib3/connectionpool.py", line 380, in _make_request
-    httplib_response = conn.getresponse(buffering=True)
-TypeError: getresponse() got an unexpected keyword argument 'buffering'
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/usr/bin/nose2-3", line 11, in <module>
-    load_entry_point('nose2==0.7.4', 'console_scripts', 'nose2')()
-  File "/usr/lib/python3/dist-packages/nose2/main.py", line 306, in discover
-    return main(*args, **kwargs)
-  File "/usr/lib/python3/dist-packages/nose2/main.py", line 100, in __init__
-    super(PluggableTestProgram, self).__init__(**kw)
-  File "/usr/lib/python3.6/unittest/main.py", line 95, in __init__
-    self.runTests()
-  File "/usr/lib/python3/dist-packages/nose2/main.py", line 271, in runTests
-    self.result = runner.run(self.test)
-  File "/usr/lib/python3/dist-packages/nose2/runner.py", line 53, in run
-    executor(test, result)
-  File "/usr/lib/python3/dist-packages/nose2/runner.py", line 41, in <lambda>
-    executor = lambda suite, result: suite(result)
-  File "/usr/lib/python3.6/unittest/suite.py", line 84, in __call__
-    return self.run(*args, **kwds)
-  File "/usr/lib/python3.6/unittest/suite.py", line 122, in run
-    test(result)
-  File "/usr/lib/python3.6/unittest/suite.py", line 84, in __call__
-    return self.run(*args, **kwds)
-  File "/usr/lib/python3.6/unittest/suite.py", line 122, in run
-    test(result)
-  File "/usr/lib/python3.6/unittest/case.py", line 653, in __call__
-    return self.run(*args, **kwds)
-  File "/usr/lib/python3.6/unittest/case.py", line 605, in run
-    testMethod()
-  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py", line 74, in test_poet_smoke
-    'time_between_batches': 1,
-  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py", line 112, in _run_giskard_network_test
-    self.send_txns_alternating(batches, time_between_batches)
-  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py", line 154, in send_txns_alternating
-    client.poll_for_batches([batch_id])
-  File "/usr/lib/python3/dist-packages/sawtooth_poet_tests/intkey_client.py", line 79, in poll_for_batches
-    wait=(self.wait - time_waited))
-  File "/usr/lib/python3/dist-packages/sawtooth_cli/rest_client.py", line 103, in _get
-    params=self._format_queries(queries),
-  File "/usr/lib/python3/dist-packages/sawtooth_cli/rest_client.py", line 196, in _submit_request
-    url, params=params, data=data, headers=headers)
-  File "/usr/lib/python3/dist-packages/requests/api.py", line 72, in get
-    return request('get', url, params=params, **kwargs)
-  File "/usr/lib/python3/dist-packages/requests/api.py", line 58, in request
-    return session.request(method=method, url=url, **kwargs)
-  File "/usr/lib/python3/dist-packages/requests/sessions.py", line 520, in request
-    resp = self.send(prep, **send_kwargs)
-  File "/usr/lib/python3/dist-packages/requests/sessions.py", line 630, in send
-    r = adapter.send(request, **kwargs)
-  File "/usr/lib/python3/dist-packages/requests/adapters.py", line 440, in send
-    timeout=timeout
-  File "/usr/lib/python3/dist-packages/urllib3/connectionpool.py", line 601, in urlopen
-    chunked=chunked)
-  File "/usr/lib/python3/dist-packages/urllib3/connectionpool.py", line 383, in _make_request
-    httplib_response = conn.getresponse()
-  File "/usr/lib/python3.6/http/client.py", line 1377, in getresponse
-    response.begin()
-  File "/usr/lib/python3.6/http/client.py", line 320, in begin
-    version, status, reason = self._read_status()
-  File "/usr/lib/python3.6/http/client.py", line 281, in _read_status
-    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
-  File "/usr/lib/python3.6/socket.py", line 586, in readinto
-    return self._sock.recv_into(b)
-KeyboardInterrupt
-Exception ignored in: <module 'threading' from '/usr/lib/python3.6/threading.py'>
-Traceback (most recent call last):
-  File "/usr/lib/python3.6/threading.py", line 1294, in _shutdown
-    t.join()
-  File "/usr/lib/python3.6/threading.py", line 1056, in join
-    self._wait_for_tstate_lock()
-  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-    elif lock.acquire(block, timeout):
-KeyboardInterrupt
-[2023-04-20 15:05:32.072 ERROR    (unknown file)] [2023-04-20 15:05:32.073 ERROR    (unknown file)]
-<module 'threading' from '/usr/lib/python3.6/threading.py'><module 'threading' from '/usr/lib/python3.6/threading.py'> error executing main
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/server/cli.py", line 304, in main
-    validator.stop()
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/server/core.py", line 492, in stop
-    self._transaction_executor.stop()
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/execution/executor.py", line 526, in stop
-    self._executing_threadpool.shutdown(wait=True)
-  File "/usr/lib/python3.6/concurrent/futures/thread.py", line 152, in shutdown
-    t.join()
-  File "/usr/lib/python3.6/threading.py", line 1056, in join
-    self._wait_for_tstate_lock()
-  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-    elif lock.acquire(block, timeout):
-KeyboardInterrupt Traceback (most recent call last):
-
-
-error executing main
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/server/cli.py", line 304, in main
-    validator.stop()
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/server/core.py", line 489, in stop
-    self._client_thread_pool.shutdown(wait=True)
-  File "/usr/lib/python3.6/concurrent/futures/thread.py", line 152, in shutdown
-    t.join()
-  File "/usr/lib/python3.6/threading.py", line 1056, in join
-    self._wait_for_tstate_lock()
-  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-    elif lock.acquire(block, timeout):
-KeyboardInterrupt
-error executing main
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/server/cli.py", line 304, in main
-    validator.stop()
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/server/core.py", line 492, in stop
-    self._transaction_executor.stop()
-  File "/usr/lib/python3/dist-packages/sawtooth_validator/execution/executor.py", line 526, in stop
-    self._executing_threadpool.shutdown(wait=True)
-  File "/usr/lib/python3.6/concurrent/futures/thread.py", line 152, in shutdown
-    t.join()
-  File "/usr/lib/python3.6/threading.py", line 1056, in join
-    self._wait_for_tstate_lock()
-  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-    elif lock.acquire(block, timeout):
-KeyboardInterrupt  File "/usr/lib/python3.6/threading.py", line 1294, in _shutdown
-Traceback (most recent call last):
-Traceback (most recent call last):
-
-[2023-04-20 15:05:32.075 WARNING  dispatch]
-    t.join()  File "/usr/lib/python3.6/threading.py", line 1294, in _shutdown
-  File "/usr/lib/python3.6/threading.py", line 1294, in _shutdown
-[2023-04-20 15:05:32.076 WARNING  dispatch]
-  File "/usr/lib/python3.6/threading.py", line 1056, in join
-    t.join()    t.join()    
-[2023-04-20 15:05:32 ERROR   base_events]
-[2023-04-20 15:05:32.107 ERROR    base_events]  File "/usr/lib/python3.6/threading.py", line 1056, in join
-   File "/usr/lib/python3.6/threading.py", line 1056, in join
-[2023-04-20 15:05:32 ERROR   base_events]self._wait_for_tstate_lock()    Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError      self._wait_for_tstate_lock()
-self._wait_for_tstate_lock()Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError
-
-[2023-04-20 15:05:32 ERROR   base_events]
-
-Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-[2023-04-20 15:05:32 INFO    core]  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-[2023-04-20 15:05:32 ERROR   base_events]  File "/usr/lib/python3.6/threading.py", line 1072, in _wait_for_tstate_lock
-         [2023-04-20 15:05:32 INFO    core]
-elif lock.acquire(block, timeout): elif lock.acquire(block, timeout):     
-Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError
- elif lock.acquire(block, timeout):KeyboardInterrupt
-during waiting for response on registration: the connection to the validator was lostKeyboardInterrupt
-during waiting for response on registration: the connection to the validator was lost[2023-04-20 15:05:32.135 ERROR    zmq_driver]
-Task exception was never retrieved
-future: <Task finished coro=<_SendReceiveThread._monitor_disconnects() done, defined at /usr/lib/python3/dist-packages/sawtooth_sdk/messaging/stream.py:140> exception=CancelledError()>
-concurrent.futures._base.CancelledError
-
-
- 
-[2023-04-20 15:05:32 INFO    core]KeyboardInterrupt Uncaught driver exception
-Traceback (most recent call last):
-  File "/usr/lib/python3/dist-packages/sawtooth_sdk/consensus/zmq_driver.py", line 84, in _driver_loop
-    message = future.result(1)
-  File "/usr/lib/python3.6/concurrent/futures/_base.py", line 430, in result
-    raise CancelledError()
-concurrent.futures._base.CancelledError[2023-04-20 15:05:32 INFO    core]during waiting for response on registration: the connection to the validator was lost
- 
-
-during waiting for response on registration: the connection to the validator was lost[2023-04-20 15:05:32 INFO    core]
- reregistering with validator[2023-04-20 15:05:32 INFO    core]
- [2023-04-20 15:05:32 INFO    core]reregistering with validator 
-reregistering with validator[2023-04-20 15:05:32 INFO    core]
- reregistering with validator
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       [2023-04-20 15:04:37.000 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:40.008 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:43.014 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:46.020 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:49.027 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:52.034 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:55.041 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:04:58.048 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:01.054 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:04.060 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:07.067 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:10.073 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:13.079 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:16.085 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:19.092 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:22.098 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:25.104 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:28.110 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:31.116 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:34.124 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:37.131 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:40.137 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:43.144 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:46.151 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:49.158 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:52.165 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)
-[2023-04-20 15:05:55.171 INFO     core] remaining threads: ThreadPoolExecutor-7_0 (Thread), ThreadPoolExecutor-7_1 (Thread), Dummy-4 (_DummyThread)

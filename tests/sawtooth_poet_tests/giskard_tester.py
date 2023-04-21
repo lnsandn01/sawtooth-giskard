@@ -28,7 +28,8 @@ class GiskardTester:
     def __init__(self, num_endpoints):
         print("init tester")
         """ Create Streams for each engine in the net for exchanging nstates with each other """
-        self._exit = False
+        self.exit = False
+        self.exited = False
         self.num_endpoints = num_endpoints
         self.sockets = []
         self.context = zmq.Context()
@@ -63,11 +64,11 @@ class GiskardTester:
         return 'tcp://127.0.0.1:{}'.format(3030+num)
 
     def tester_loop(self):
-        while True:
-            socks = dict(self.poller.poll())
+        while not self.exit:
+            socks = dict(self.poller.poll(2000))
             for sock in self.sockets:
                 if sock in socks and socks[sock] == zmq.POLLIN:
-                    nstate: NState = sock.recv_pyobj()
+                    nstate: NState = sock.recv_pyobj(zmq.DONTWAIT)
                     if nstate.node_id not in self.nodes:
                         self.nodes.append(nstate.node_id)
                     #print("\n\n\nTester Msg received ", nstate.node_id, "\n\n\n")
@@ -78,6 +79,14 @@ class GiskardTester:
                     f = open(self.file_name2, "w")
                     f.write(json.dumps(self.gtrace_json, indent=4))
                     f.close()
+        # exit from loop, shutdown socket connections
+        for sock in self.sockets:
+            self.poller.unregister(sock)
+            time.sleep(0.1)
+            sock.close()
+        self.context.destroy()
+        self.exited = True
+        return
 
     @staticmethod
     def create_GState_from_file() -> GState:

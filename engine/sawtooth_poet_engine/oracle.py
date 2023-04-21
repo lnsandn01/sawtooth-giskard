@@ -175,6 +175,7 @@ class _BlockCacheProxy:
     def __init__(self, service, stream):
         self.block_store = _BlockStoreProxy(service, stream)  # public
         self._service = service
+        self.pending_blocks = []
 
     def __eq__(self, other):
         if not isinstance(other, _BlockCacheProxy):

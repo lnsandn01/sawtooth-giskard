@@ -98,7 +98,7 @@ class TestGiskardNetwork(unittest.TestCase):
             4) some nodes are (possibly) stopped.
         '''
         poet_kwargs = {} if poet_kwargs is None else poet_kwargs
-
+        giskard_tester = None
         for round_ in range(rounds):
             giskard_tester = GiskardTester(start_nodes_per_round)
             self.start_new_nodes(
@@ -117,6 +117,9 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nasserted consensus\n\n")
             self.stop_nodes(stop_nodes_per_round)
             LOGGER.info("\n\nstopped nodes\n\n")
+            giskard_tester.exit = True
+            while not giskard_tester.exited:
+                time.sleep(0.1)
 
         # Attempt to cleanly shutdown all processes
         for node_num in self.nodes:
@@ -189,8 +192,8 @@ class TestGiskardNetwork(unittest.TestCase):
         for proc in processes:
             if proc.returncode is not None:
                 raise subprocess.CalledProcessError(proc.pid, proc.returncode)
-        self.nodes[num] = processes
 
+        self.nodes[num] = processes
         self.clients[num] = IntkeyClient(
             NodeController.http_address(num), WAIT)
         time.sleep(1)

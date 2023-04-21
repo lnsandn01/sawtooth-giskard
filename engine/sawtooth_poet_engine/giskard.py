@@ -1,6 +1,7 @@
 import copy
 import functools
 import itertools
+import time
 from collections import namedtuple
 from functools import reduce
 from typing import List
@@ -28,26 +29,29 @@ class Giskard:
         return not node.dishonest
 
     @staticmethod
-    def is_block_proposer(
-            node, view=0):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
-        """returns True if the node is a block proposer for the current view """
-        return True
+    def is_block_proposer(node, view=0, peers: List[str] = []):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+        """returns True if the node_id's position in the peers list is equal to the view number % nr of peers"""
+        position_in_peers = peers.index(node.node_id)
+        return position_in_peers == view % (len(peers) - 1)  # TODO check where view starts 0,1
 
     # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
     # endregion
 
     # region block methods
     @staticmethod
-    def generate_new_block(block: GiskardBlock, block_cache,
+    def generate_new_block(parent_block: GiskardBlock, block_cache,
                            block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
-        """Generates a new giskard block
+        """waits for a new block to be received from the validator
         TODO block as input is the parent block -> have to get the new child block from the handler in engine """
-        new_block = Block(block.block_id + 1,
-                          block.block_id,
-                          block.signer_id,
-                          block.block_num + 1,
-                          block.payload,
-                          block.summary)
+        while len(block_cache.pending_blocks) == 0:
+            time.sleep(0.5)
+        pending_block = block_cache.pending_blocks.pop(0)
+        new_block = Block(pending_block.block_id + 1,
+                          parent_block.block_id,
+                          pending_block.signer_id,
+                          parent_block.block_num + 1,
+                          pending_block.payload,
+                          pending_block.summary)
         return GiskardBlock(new_block, block_index)
 
     @staticmethod
