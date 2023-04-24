@@ -18,10 +18,9 @@ import os
 from collections import namedtuple
 
 import sawtooth_signing as signing
-from giskard_block import GiskardBlock
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
-
+from sawtooth_poet_engine.giskard_block import GiskardBlock
 from sawtooth_sdk.consensus.exceptions import UnknownBlock, SameAsPreviousBlockAndNotGenesis
 from sawtooth_sdk.messaging.stream import Stream
 from sawtooth_sdk.protobuf.batch_pb2 import Batch
@@ -110,8 +109,6 @@ class PoetOracle:
         return fork_resolver.compare_forks(cur_fork_head, new_fork_head)
 
 
-
-
 class PoetBlock:
     def __init__(self, block):
         # fields that come with consensus blocks
@@ -176,6 +173,7 @@ class _BlockCacheProxy:
         self.block_store = _BlockStoreProxy(service, stream)  # public
         self._service = service
         self.pending_blocks = []
+        self.latest_block_index = 0
 
     def __eq__(self, other):
         if not isinstance(other, _BlockCacheProxy):

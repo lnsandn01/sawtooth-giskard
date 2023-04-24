@@ -24,7 +24,7 @@ class GiskardBlock(object):
         self.summary = block.summary
 
         # fields that giskard requires
-        self.block_index = 0  # the block index in the current view
+        self.block_index = block_index  # the block index in the current view
 
     def __eq__(self, other):
         return self.block_id == other.block_id \
@@ -58,3 +58,8 @@ class GiskardBlock(object):
 class GiskardGenesisBlock(GiskardBlock):
     def __init__(self):
         super().__init__(Block(NULL_BLOCK_IDENTIFIER, NULL_BLOCK_IDENTIFIER, 0, 0, "", ""), 0)
+
+    def __eq__(self, other):
+        return self.block_num == other.block_num \
+            and self.previous_id == other.previous_id \
+            and self.block_index == other.block_index

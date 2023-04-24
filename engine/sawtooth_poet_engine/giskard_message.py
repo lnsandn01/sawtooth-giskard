@@ -2,6 +2,12 @@
 class GiskardMessage(object):
     """All Giskard messages have at least those fields"""
 
+    CONSENSUS_GISKARD_PREPARE_BLOCK = 1000
+    CONSENSUS_GISKARD_PREPARE_VOTE = 1001
+    CONSENSUS_GISKARD_VIEW_CHANGE = 1002
+    CONSENSUS_GISKARD_PREPARE_QC = 1003
+    CONSENSUS_GISKARD_VIEW_CHANGE_QC = 1004
+
     def __init__(self, message_type, view, sender, block, piggyback_block):
         self.message_type = message_type
         self.view = view

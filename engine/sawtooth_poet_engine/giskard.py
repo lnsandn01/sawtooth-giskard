@@ -29,7 +29,8 @@ class Giskard:
         return not node.dishonest
 
     @staticmethod
-    def is_block_proposer(node, view=0, peers: List[str] = []):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
+    def is_block_proposer(node, view=0, peers: List[
+        str] = []):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
         """returns True if the node_id's position in the peers list is equal to the view number % nr of peers"""
         position_in_peers = peers.index(node.node_id)
         return position_in_peers == view % (len(peers) - 1)  # TODO check where view starts 0,1
@@ -43,13 +44,19 @@ class Giskard:
                            block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
         """waits for a new block to be received from the validator
         TODO block as input is the parent block -> have to get the new child block from the handler in engine """
-        while len(block_cache.pending_blocks) == 0:
-            time.sleep(0.5)
+        if len(block_cache.pending_blocks) == 0:
+            return None
         pending_block = block_cache.pending_blocks.pop(0)
-        new_block = Block(pending_block.block_id + 1,
+        if pending_block == GiskardGenesisBlock():
+            block_index = 0
+            block_num = 0
+        else:
+            block_num = parent_block.block_num + 1
+
+        new_block = Block(pending_block.block_id,
                           parent_block.block_id,
                           pending_block.signer_id,
-                          parent_block.block_num + 1,
+                          block_num,
                           pending_block.payload,
                           pending_block.summary)
         return GiskardBlock(new_block, block_index)
@@ -268,8 +275,8 @@ class Giskard:
         return msg1 in state.out_messages \
             and msg2 in state.out_messages \
             and msg1.view == msg2.view \
-            and msg1.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
-            and msg2.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and msg1.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
+            and msg2.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and msg1.block != msg2.block \
             and msg1.block.block_num == msg2.block.block_num
 
@@ -280,13 +287,13 @@ class Giskard:
         - a PrepareVote or PrepareQC message in the sent message buffer for a different block of the same height. """
         msg: GiskardMessage
         for msg in state.counting_messages:
-            if msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
                     and b.block_num == msg.block_num \
                     and b != msg.block:
                 return True
         for msg in state.out_messages:
-            if (msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
-                or msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC) \
+            if (msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
+                or msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC) \
                     and b.block_num == msg.block_num \
                     and b != msg.block:
                 return True
@@ -297,7 +304,7 @@ class Giskard:
         """ Returns True if there is a block in the out_messages buffer with the same height """
         msg: GiskardBlock
         for msg in state.out_messages:
-            if msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
                     and b.block_num == msg.block_num \
                     and b != msg.block:
                 return True
@@ -307,7 +314,7 @@ class Giskard:
     def exists_same_height_PrepareBlock(state: NState, b: GiskardBlock) -> bool:
         msg: GiskardBlock
         for msg in state.counting_messages:
-            if msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK \
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
                     and b.block_num == msg.block_num \
                     and b != msg.block:
                 return True
@@ -315,7 +322,7 @@ class Giskard:
 
     @staticmethod
     def same_height_block_msg(b: GiskardBlock, msg: GiskardMessage) -> bool:
-        return msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE \
+        return msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and b.block_num == msg.block_num \
             and b != msg.block
 
@@ -334,7 +341,7 @@ class Giskard:
     @staticmethod
     def processed_PrepareVote_in_view_about_block(state: NState, view: int, b: GiskardBlock) -> List[GiskardMessage]:
         """ Processed PrepareVote messages in some view about some block: """
-        return list(filter(lambda msg: msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_VOTE
+        return list(filter(lambda msg: msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE
                                        and msg.block == b
                                        and msg.view == view, state.counting_messages))
 
@@ -350,7 +357,7 @@ class Giskard:
         for msg in state.counting_messages:
             if msg.view == view \
                     and msg.block == b \
-                    and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC:
+                    and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
                 return True
         return False
 
@@ -410,7 +417,7 @@ class Giskard:
     @staticmethod
     def processed_ViewChange_in_view(state: NState, view: int) -> List[GiskardMessage]:
         """ Quorum ViewChange messages in some view """
-        return list(filter(lambda msg: msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE
+        return list(filter(lambda msg: msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE
                                        and msg.view == view, state.counting_messages))
 
     @staticmethod
@@ -451,7 +458,7 @@ class Giskard:
     def highest_prepare_block_message(state: NState, peers) -> GiskardMessage:
         """ The following definition constructs the ViewChange message to be
         sent by each participating node upon a timeout. """
-        return GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                               state.node_view,
                               state.node_id,
                               Giskard.highest_prepare_block_in_view(state, state.node_view, peers),
@@ -495,21 +502,33 @@ class Giskard:
         block1 = Giskard.generate_new_block(previous_msg.block, block_cache, 1)
         block2 = Giskard.generate_new_block(block1, block_cache, 2)
         block3 = Giskard.generate_last_block(block1, block_cache)  # labeled as last block in view
-        return [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+        return [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                state.node_view,
                                state.node_id,
                                block1,
                                previous_msg.block),  # PrepareQC of the highest block from previous round
-                GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                state.node_view,
                                state.node_id,
                                block2,
                                previous_msg.block),  # PrepareQC of the highest block from previous round
-                GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
+                GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                state.node_view,
                                state.node_id,
                                block3,
                                previous_msg.block)]  # PrepareQC of the highest block from previous round
+
+    @staticmethod
+    def make_PrepareBlock(state: NState, previous_msg: GiskardMessage, block_cache, block_index: int) -> GiskardMessage:
+        """ CHANGE FROM THE ORIGINAL SPECIFICATION
+        sometimes there are no 3 blocks ready for preperation,
+        so they are generated and send of one after another"""
+        block = Giskard.generate_new_block(previous_msg.block, block_cache, block_index)
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                              state.node_view,
+                              state.node_id,
+                              block,
+                              previous_msg.block)
 
     @staticmethod
     def make_PrepareVote(state: NState, quorum_msg: GiskardMessage,
@@ -520,7 +539,7 @@ class Giskard:
 
         <<PrepareVote>>s are also computed from <<PrepareBlock>> messages,
         which means another one of its inputs must be a <<PrepareBlock>> message. """
-        return GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,  # message type
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,  # message type
                               state.node_view,  # view number
                               state.node_id,
                               prepareblock_msg.block,  # block to vote for
@@ -540,14 +559,14 @@ class Giskard:
                         filter(lambda msg: msg.view == quorum_msg.view
                                            and not Giskard.exists_same_height_block(state, msg.block)
                                            and Giskard.parent_ofb(msg.block, quorum_msg.block, block_cache)
-                                           and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                           and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                state.counting_messages)))
 
     @staticmethod
     def make_PrepareQC(state: NState, msg: GiskardMessage) -> GiskardMessage:
         """ PrepareQC messages carry nothing, and can only be sent after a quorum number of PrepareVotes,
         which means its only input is a PrepareVote containing the relevant block. """
-        return GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,  # message type
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,  # message type
                               state.node_view,  # view number
                               state.node_id,
                               msg.block,
@@ -558,7 +577,7 @@ class Giskard:
         """ ViewChange messages carry the <<PrepareQC>> message of the highest block to
         reach prepare stage, and since they are triggered by timeouts, no input
         message is required. """
-        return GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE,
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE,
                               state.node_view,
                               state.node_id,
                               Giskard.highest_prepare_block_in_view(state, state.node_view, peers),
@@ -592,7 +611,7 @@ class Giskard:
     @staticmethod
     def GenesisBlock_message(
             state: NState) -> GiskardMessage:  # Todo check with sawtooth genesis / call when genesis has been received / when generated with giskard consensus (later)
-        return GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE_QC,
+        return GiskardMessage(1004,
                               0,
                               state.node_id,
                               GiskardGenesisBlock(),
@@ -611,11 +630,29 @@ class Giskard:
             and not state.timeout
 
     @staticmethod
-    def propose_block_init_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+    def propose_block_init_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
         """ Actually does the transition to propose blocks """
-        lm = Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state))
+        if len(block_cache.pending_blocks) < 3:
+            """CHANGE from the original specification
+            sometimes there are no 3 blocks ready for preperation, 
+            so they are generated and send of one after another"""
+            lm = []
+            while block_cache.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER \
+                    and len(block_cache.pending_blocks) != 0:
+                if block_cache.pending_blocks[0] != GiskardGenesisBlock():
+                    block_cache.latest_block_index += 1  # do not increase the counter when the first block was the genesis block
+                # TODO solve problem with only having one block at a time in pending_blocks
+                msg = Giskard.make_PrepareBlock(
+                    state, Giskard.GenesisBlock_message(state), block_cache, block_cache.latest_block_index)
+                lm.append(msg)
+                state_prime = Giskard.record(state, msg)
+            return [state_prime, lm]
+
+        lm = Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)
         state_prime = Giskard.record_plural(
-            state, Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state)))
+            state, lm)
+        block_cache.latest_block_index = 3
+
         return [state_prime, lm]
 
     @staticmethod
@@ -1141,7 +1178,8 @@ class Giskard:
         block_cache = None
         lm = []
         if t == giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
-            lm = Giskard.propose_block_init_set(state, msg)[1]
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
+            lm = Giskard.propose_block_init_set(state, msg, block_cache)[1]
         elif t == giskard_state_transition_type.DISCARD_VIEW_INVALID_TYPE:
             msg = state.in_messages[
                 len(state.in_messages) - 1]  # Todo check in what order the in messages are processed
@@ -1299,10 +1337,13 @@ class Giskard:
                 for node1, node2 in itertools.product(nodes, nodes):
                     if node1 == node2:
                         continue
-                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers).block_store.blocks
-                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers).block_store.blocks
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1],
+                                                                                 peers).block_store.blocks
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2],
+                                                                                 peers).block_store.blocks
                     view = min(gstate[node1][0].node_view, gstate[node2][0].node_view)
-                    for v, block1, block2 in itertools.product(range(1, view), blocks1, blocks2):  # Todo check if views start with 0 or 1
+                    for v, block1, block2 in itertools.product(range(1, view), blocks1,
+                                                               blocks2):  # Todo check if views start with 0 or 1
                         if node1 in peers \
                                 and node2 in peers \
                                 and block1 != block2 \
@@ -1370,6 +1411,7 @@ class Giskard:
     there are no more than 1/3 Byzantine/dishonest blocks. Therefore, we reach a contradiction. """
 
     """ TODO Reducing the proof? """
+
     # endregion
 
     # region safety property two: precommit stage height injectivity
@@ -1405,8 +1447,10 @@ class Giskard:
                 for node1, node2 in itertools.product(nodes, nodes):
                     if node1 == node2:
                         continue
-                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1], peers).block_store.blocks
-                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2], peers).block_store.blocks
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1],
+                                                                                 peers).block_store.blocks
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2],
+                                                                                 peers).block_store.blocks
                     for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
                         if node1 in peers \
                                 and node2 in peers \
@@ -1416,6 +1460,7 @@ class Giskard:
                                 and block1.block_num == block2.block_num:  # blocks are different but same block height
                             return False  # TODO more printout info would be nice for testing
         return True
+
     # endregion
 
     # region safety property three: commit stage height injectivity

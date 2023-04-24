@@ -119,15 +119,15 @@ class TestGiskardUnit(unittest.TestCase):
             get_view msg = node_view s."""
     def test_processed_ViewChange_in_view(self):
         """Test for processed_ViewChange_in_view"""
-        state = NState(None, 0, 0, [], [GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE, 3, [], [], [])],
+        state = NState(None, 0, 0, [], [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE, 3, [], [], [])],
                        [], False)
-        msg = GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE, 3, [], [], [])
+        msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE, 3, [], [], [])
         view = 3
 
         # test with correct input
         assert msg in Giskard.processed_ViewChange_in_view(state, view)
         assert msg in state.counting_messages \
-               and msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE \
+               and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
                and msg.view == view
         # test wrong input
         view = 4
@@ -136,7 +136,7 @@ class TestGiskardUnit(unittest.TestCase):
     """@staticmethod
     def processed_ViewChange_in_view_correct(state: NState, view, msg) -> bool:
         if msg in Giskard.processed_ViewChange_in_view(state, view):
-            return msg in state.counting_messages and msg.message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE and msg.view == view"""
+            return msg in state.counting_messages and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE and msg.view == view"""
 
 
     def test_about_highest_message_in_list(self, node=None, message_type=0, lm: List[GiskardMessage] = None, msg=None):
@@ -144,24 +144,24 @@ class TestGiskardUnit(unittest.TestCase):
         # TODO lemma where I don't know if it is actually that important to test
         if not node:
             node = "me"
-            message_type = Message.CONSENSUS_GISKARD_PREPARE_BLOCK
-            lm = [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+            message_type = GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK
+            lm = [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                  0,
                                  "",
                                  GiskardBlock(Block(1, 0, "", 10, "", ""), 1),
                                  GiskardGenesisBlock()),
-                  GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                  GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                  0,
                                  "",
                                  GiskardBlock(Block(1, 0, "", 3, "", ""), 1),
                                  GiskardGenesisBlock())
                   ]
-            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+            msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                  0,
                                  "",
                                  GiskardBlock(Block(1, 0, "", 5, "", ""), 1),
                                  GiskardGenesisBlock())
-            msg2 = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+            msg2 = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                   0,
                                   "",
                                   GiskardBlock(Block(1, 0, "", 20, "", ""), 1),
@@ -175,24 +175,24 @@ class TestGiskardUnit(unittest.TestCase):
         """Test if message with the highest block is type actually of type ViewChange in a list of ViewChange msgs"""
         # TODO lemma where I don't know if it is actually that important to test
         if not state:
-            state = NState(None, 0, 0, [], [GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE,
+            state = NState(None, 0, 0, [], [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE,
                                                      0,
                                                      "",
                                                      GiskardBlock(Block(1, 0, "", 10, "", ""), 1),
                                                      GiskardGenesisBlock()),
-                                      GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                      GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                                      7,
                                                      "",
                                                      GiskardBlock(Block(1, 0, "", 3, "", ""), 1),
                                                      GiskardGenesisBlock()),
-                                      GiskardMessage(Message.CONSENSUS_GISKARD_VIEW_CHANGE,
+                                      GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE,
                                                      3,
                                                      "",
                                                      GiskardBlock(Block(1, 0, "", 3, "", ""), 1),
                                                      GiskardGenesisBlock())
                                       ],
                            [], False)
-        assert Giskard.highest_ViewChange_message(state).message_type == Message.CONSENSUS_GISKARD_VIEW_CHANGE
+        assert Giskard.highest_ViewChange_message(state).message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE
     # endregion
 
     # region facts about local state transitions
@@ -202,31 +202,31 @@ class TestGiskardUnit(unittest.TestCase):
         # TODO probably should write a test outside that calls this and test every transition
         if not state1:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
-            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+            msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                  1,
                                  proposer,
                                  GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                  GiskardGenesisBlock())
             state1 = NState(None, 1, node.node_id,
                             [msg],
-                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                            [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you3,
                                             GiskardBlock(
                                                 Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you1,
                                             GiskardBlock(
                                                 Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                             1,
                                             proposer,
                                             GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you2,
                                             GiskardBlock(
@@ -250,31 +250,31 @@ class TestGiskardUnit(unittest.TestCase):
         # TODO probably should write a test outside that calls this and test every transition
         if not state1:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
-            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+            msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                  1,
                                  proposer,
                                  GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                  GiskardGenesisBlock())
             state1 = NState(None, 1, node.node_id,
                             [msg],
-                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                            [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you3,
                                             GiskardBlock(
                                                 Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you1,
                                             GiskardBlock(
                                                 Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                             1,
                                             proposer,
                                             GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you2,
                                             GiskardBlock(
@@ -300,31 +300,31 @@ class TestGiskardUnit(unittest.TestCase):
         # TODO probably should write a test outside that calls this and test every transition
         if not state1:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
-            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+            msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                  1,
                                  proposer,
                                  GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                  GiskardGenesisBlock())
             state1 = NState(None, 1, node.node_id,
                             [msg],
-                            [GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                            [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you3,
                                             GiskardBlock(
                                                 Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you1,
                                             GiskardBlock(
                                                 Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                             1,
                                             proposer,
                                             GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),
                                             GiskardGenesisBlock()),
-                             GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+                             GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                             1,
                                             you2,
                                             GiskardBlock(
@@ -349,7 +349,7 @@ class TestGiskardUnit(unittest.TestCase):
         # TODO probably should write a test outside that calls this and test every transition
         if not state1:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
-            msg = GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_VOTE,
+            msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE,
                                  1,
                                  proposer,
                                  GiskardBlock(Block(1, NULL_BLOCK_IDENTIFIER, "proposer", 1, "", ""), 1),

@@ -15,14 +15,18 @@
 
 import os
 import logging
+import pickle
 import queue
 import json
+import struct
 import time
+
+import jsonpickle
 import zmq
 from collections import namedtuple
 
 import sawtooth_signing as signing
-from journal.block_wrapper import LAST_BLOCK_INDEX_IDENTIFIER
+from sawtooth_poet.journal.block_wrapper import LAST_BLOCK_INDEX_IDENTIFIER, NULL_BLOCK_IDENTIFIER
 from sawtooth_signing import CryptoFactory
 from sawtooth_signing.secp256k1 import Secp256k1PrivateKey
 
@@ -77,8 +81,7 @@ class GiskardEngine(Engine):
         self.node = None
         # original NState from the formal specification
         self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
-        self.block_cache = None
-        self.latest_block_index = 0
+        self.inited_genesis = False
         # connection to GiskardTester, to send state updates
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()
@@ -110,11 +113,19 @@ class GiskardEngine(Engine):
 
     def _initialize_block(self):
         chain_head = self._get_chain_head()
-        LOGGER.info("\n\nChain head: " + str(self._get_chain_head().block_num))
         initialize = self._oracle.initialize_block(chain_head)
 
         if initialize:
             self._service.initialize_block(previous_id=chain_head.block_id)
+            # TODO check what checks are necessary here by poet
+            if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
+                    and chain_head == GiskardGenesisBlock():
+                """ chain head is the genesis block -> propose init block """
+                self.node.block_cache.pending_blocks.append(chain_head)
+                self.nstate, lm = Giskard.propose_block_init_set(
+                    self.nstate, None, self.node.block_cache)
+                self.socket.send_pyobj(self.nstate)
+                self._send_out_msgs()
 
         return initialize
 
@@ -211,9 +222,9 @@ class GiskardEngine(Engine):
         validator_id = signer.get_public_key().as_hex()
         self.peers.append(validator_id)
         stream = Stream(self._component_endpoint)
-        self.block_cache = _BlockCacheProxy(self._service, stream)
+        block_cache = _BlockCacheProxy(self._service, stream)
         _batch_publisher = _BatchPublisherProxy(stream, signer)
-        self.node = GiskardNode(validator_id, 0, self.dishonest, self.block_cache)
+        self.node = GiskardNode(validator_id, 0, self.dishonest, block_cache)
         self.nstate = NState(self.node)
         self.socket.send_pyobj(self.nstate)
         """file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/engine_" + validator_id + ".txt"
@@ -233,11 +244,11 @@ class GiskardEngine(Engine):
             Message.CONSENSUS_NOTIFY_PEER_CONNECTED: self._handle_peer_connected,
             Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED: self.handle_peer_disconnected,
             Message.CONSENSUS_NOTIFY_PEER_MESSAGE: self._handle_peer_msgs,
-            1000: self._handle_prepare_block,
-            1001: self._handle_prepare_vote,
-            1002: self._handle_view_change,
-            1003: self._handle_prepare_qc,
-            1004: self._handle_view_change_qc
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
+            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE: self._handle_view_change,
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC: self._handle_prepare_qc,
+            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC: self._handle_view_change_qc
         }
 
         while True:
@@ -257,10 +268,6 @@ class GiskardEngine(Engine):
                         LOGGER.info('Received message: %s',
                                     Message.MessageType.Name(type_tag))
                         handle_message = handlers[type_tag]
-                        if type_tag != Message.CONSENSUS_NOTIFY_PEER_CONNECTED \
-                                and type_tag != Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED \
-                                and type_tag != Message.CONSENSUS_NOTIFY_PEER_MESSAGE:
-                            self.socket.send_pyobj(self.nstate)
                     except KeyError:
                         LOGGER.error('Unknown type tag: %s',
                                      Message.MessageType.Name(type_tag))
@@ -296,11 +303,19 @@ class GiskardEngine(Engine):
                     self._building = False
 
     def _handle_new_block(self, block):
-        #
-        self.block_cache.pending_blocks.append(block)
+        self.node.block_cache.pending_blocks.append(block)
         if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
-                and self.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER:
-            self.nstate, lm = Giskard.propose_block_init_set(self.nstate, None)
+                and self.node.block_cache.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER:
+            # TODO call all transitions with timeouts in mind
+            if self.inited_genesis:
+                """ chain head was the genesis block -> propose init block """
+                self.node.block_cache.pending_blocks.append(block)
+                self.nstate, lm = Giskard.propose_block_init_set(
+                    self.nstate, None, self.node.block_cache)
+            else:
+                pass
+            self.socket.send_pyobj(self.nstate)
+            self._send_out_msgs()
 
         block = PoetBlock(block)
         LOGGER.info('Received %s', block)
@@ -328,15 +343,27 @@ class GiskardEngine(Engine):
         self._fail_block(block.block_id)
 
     def _handle_peer_connected(self, msg):
-        self.peers.append(msg.peer_id)
+        self.peers.append(msg.peer_id.hex())
         self.peers.sort(key=lambda h: int(h, 16))
 
     def handle_peer_disconnected(self, msg):
-        self.peers.remove(msg.peer_id)
+        self.peers.remove(msg.peer_id.hex())
         self.peers.sort(key=lambda h: int(h, 16))
 
     def _handle_peer_msgs(self, msg):
         # PoET does not care about peer notifications
+        #LOGGER.info("Peer msg: " + jsonpickle.decode(msg[0].content,None,None,False,True,False,GiskardMessage).__str__())
+        LOGGER.info("Peer msg: " + str(msg[0].content))
+        gmsg = jsonpickle.decode(msg[0].content,None,None,False,True,False,GiskardMessage)
+        handlers = {
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
+            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE: self._handle_view_change,
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC: self._handle_prepare_qc,
+            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC: self._handle_view_change_qc
+        }
+        handle_msg = handlers[gmsg.message_type]
+        handle_msg(gmsg)
         pass
 
     def _process_pending_forks(self):
@@ -376,17 +403,34 @@ class GiskardEngine(Engine):
 
         self._process_pending_forks()
 
-    def _handle_prepare_block(self, msg):
+    def _handle_prepare_block(self, msg: GiskardMessage):
+        LOGGER.info("Handle PrepareBlock")
+        self.nstate.in_messages.append(msg)
+        if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, block_cache):
+            """ first block to be proposed apart from the genesis block """
+        self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
+            self.nstate, msg, self.node.block_cache)
+        self.socket.send_pyobj(self.nstate)
+        self._send_out_msgs()
         pass
 
     def _handle_prepare_vote(self, msg):
+        LOGGER.info("Handle PrepareVote")
         pass
 
     def _handle_view_change(self, msg):
+        LOGGER.info("Handle ViewChange")
         pass
 
     def _handle_prepare_qc(self, msg):
+        LOGGER.info("Handle PrepareQC")
         pass
 
     def _handle_view_change_qc(self, msg):
+        LOGGER.info("Handle ViewChangeQC")
         pass
+
+    def _send_out_msgs(self):
+        LOGGER.info("send message: " + str(len(self.nstate.out_messages)))
+        for msg in self.nstate.out_messages:
+            self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'), bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))

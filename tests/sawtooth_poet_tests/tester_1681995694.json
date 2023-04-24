@@ -1,5 +1,0 @@
-[
-    "{\"py/object\": \"sawtooth_poet_engine.giskard_nstate.NState\", \"node_view\": 0, \"node_id\": \"03b10b422f24d5235afa1260832b72f1da1c625f43213095982e5c7ce569dd6de9\", \"in_messages\": [], \"counting_messages\": [], \"out_messages\": [], \"timeout\": false}",
-    "{\"py/object\": \"sawtooth_poet_engine.giskard_nstate.NState\", \"node_view\": 0, \"node_id\": \"03fb15457820f419d521102acc0772f2a60eb13f2e1685b553c7b5256758738257\", \"in_messages\": [], \"counting_messages\": [], \"out_messages\": [], \"timeout\": false}",
-    "{\"py/object\": \"sawtooth_poet_engine.giskard_nstate.NState\", \"node_view\": 0, \"node_id\": \"03061a85ec1ed8fbedf85e6bb2a5c55717329cc8731a5ff2e8e7b6e94c905fca0c\", \"in_messages\": [], \"counting_messages\": [], \"out_messages\": [], \"timeout\": false}"
-]
