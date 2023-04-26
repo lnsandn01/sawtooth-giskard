@@ -32,6 +32,8 @@ class Giskard:
     def is_block_proposer(node, view=0, peers: List[
         str] = []):  # TODO check how to do this with the peers, blocks proposed, view_number, node_id, timeout
         """returns True if the node_id's position in the peers list is equal to the view number % nr of peers"""
+        if len(peers) == 1:
+            return True
         position_in_peers = peers.index(node.node_id)
         return position_in_peers == view % (len(peers) - 1)  # TODO check where view starts 0,1
 
@@ -95,7 +97,12 @@ class Giskard:
     @staticmethod
     def parent_ofb(block: GiskardBlock, parent: GiskardBlock, block_cache) -> bool:
         """ Test if parent block relation works with blocks in storage """
-        return Giskard.parent_of(block, block_cache) == parent
+        if parent == GiskardGenesisBlock():
+            return True
+        parent_cache = Giskard.parent_of(block, block_cache)
+        if not parent_cache:
+            return False
+        return parent_cache == parent
 
     @staticmethod
     def higher_block(b1: GiskardBlock, b2: GiskardBlock) -> GiskardBlock:
@@ -371,6 +378,8 @@ class Giskard:
         """ We use this parameterized definition to define the general version of a block being
         in prepare stage: A block has reached prepare stage in some state if it has reached prepare
         stage in some view that is less than or equal to the current view. """
+        if b == GiskardGenesisBlock():
+            return True
         v_prime = state.node_view
         while v_prime >= 0:
             if Giskard.prepare_stage_in_view(state, v_prime, b, peers):
@@ -611,7 +620,7 @@ class Giskard:
     @staticmethod
     def GenesisBlock_message(
             state: NState) -> GiskardMessage:  # Todo check with sawtooth genesis / call when genesis has been received / when generated with giskard consensus (later)
-        return GiskardMessage(1004,
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC,
                               0,
                               state.node_id,
                               GiskardGenesisBlock(),
@@ -647,8 +656,8 @@ class Giskard:
                 lm.append(msg)
                 state_prime = Giskard.record(state, msg)
             return [state_prime, lm]
-
-        lm = Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)
+        """ TODO added genesis msg here to outbuffer, is that correct? """
+        lm = [Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)]
         state_prime = Giskard.record_plural(
             state, lm)
         block_cache.latest_block_index = 3
@@ -737,6 +746,7 @@ class Giskard:
         state_prime = Giskard.process(state, msg)
         return [state_prime, []]
 
+    # TODO how do i receive several prepare block messages? This function requires me to have received two, as i don't call process_state on pending_PrepareVote
     @staticmethod
     def process_PrepareBlock_vote(state: NState, msg: GiskardMessage,
                                   state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
@@ -755,8 +765,7 @@ class Giskard:
     def process_PrepareBlock_vote_set(state: NState, msg: GiskardMessage,
                                       block_cache) -> [NState, List[GiskardMessage]]:
         lm = Giskard.pending_PrepareVote(state, msg, block_cache)
-        state_prime = Giskard.record_plural(
-            Giskard.process(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache))
+        state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
         return [state_prime, lm]
 
     """ PrepareVote message-related actions """
@@ -1068,12 +1077,17 @@ class Giskard:
                                         msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
         state_prime = Giskard.increment_view(
             Giskard.process(
-                Giskard.process(state,
-                                GiskardMessage(Message.CONSENSUS_GISKARD_PREPARE_QC,
-                                               state.node_view,
-                                               msg.sender,
-                                               msg.block,
-                                               GiskardGenesisBlock()))))
+                Giskard.process(
+                    Giskard.add(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
+                                                      state.node_view,
+                                                      msg.sender,
+                                                      msg.block,
+                                                      GiskardGenesisBlock())),
+                    GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
+                                   state.node_view,
+                                   msg.sender,
+                                   msg.block,
+                                   GiskardGenesisBlock())), msg))
         return [state_prime, []]
 
     """ Timeout """

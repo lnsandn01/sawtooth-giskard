@@ -35,15 +35,28 @@ class GiskardBlock(object):
             and self.summary == other.summary
 
     def __str__(self):
+        block_id = self.block_id
+        previous_id = self.previous_id
+        signer_id = self.signer_id
+        summary = self.summary
+        if hasattr(block_id, 'hex'):
+            block_id = block_id.hex()
+        if hasattr(previous_id, 'hex'):
+            previous_id = previous_id.hex()
+        if hasattr(signer_id, 'hex'):
+            signer_id = signer_id.hex()
+        if hasattr(summary, 'hex'):
+            summary = summary.hex()
+
         return (
             "Block("
             + ", ".join([
                 "block_num: {}".format(self.block_num),
-                "block_id: {}".format(self.block_id.hex()),
-                "previous_id: {}".format(self.previous_id.hex()),
-                "signer_id: {}".format(self.signer_id.hex()),
+                "block_id: {}".format(block_id),
+                "previous_id: {}".format(previous_id),
+                "signer_id: {}".format(signer_id),
                 "payload: {}".format(self.payload),
-                "summary: {}".format(self.summary.hex()),
+                "summary: {}".format(summary),
             ])
             + ")"
         )
@@ -60,6 +73,9 @@ class GiskardGenesisBlock(GiskardBlock):
         super().__init__(Block(NULL_BLOCK_IDENTIFIER, NULL_BLOCK_IDENTIFIER, 0, 0, "", ""), 0)
 
     def __eq__(self, other):
+        if not hasattr(other, 'block_index'):  # for comparison with non-GiskardBlocks
+            return self.block_num == other.block_num
+
         return self.block_num == other.block_num \
             and self.previous_id == other.previous_id \
             and self.block_index == other.block_index

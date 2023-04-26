@@ -238,7 +238,7 @@ class _BlockStoreProxy:
 
         return poet_block
 
-    def get_block_iter(self, reverse):
+    def get_block_iter(self, reverse=False):
         # Ignore the reverse flag, since we can only get blocks
         # starting from the head.
 

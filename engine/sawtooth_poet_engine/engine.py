@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # -----------------------------------------------------------------------------
-
+import copy
 import os
 import logging
 import pickle
@@ -76,6 +76,7 @@ class GiskardEngine(Engine):
         # if dishonest == "dishonest":
         #    dishonest = True
         self.is_proposer = False
+        self.genesis_proposed = False
         self.peers = []
         self.k_peers = len([])
         self.node = None
@@ -117,15 +118,6 @@ class GiskardEngine(Engine):
 
         if initialize:
             self._service.initialize_block(previous_id=chain_head.block_id)
-            # TODO check what checks are necessary here by poet
-            if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
-                    and chain_head == GiskardGenesisBlock():
-                """ chain head is the genesis block -> propose init block """
-                self.node.block_cache.pending_blocks.append(chain_head)
-                self.nstate, lm = Giskard.propose_block_init_set(
-                    self.nstate, None, self.node.block_cache)
-                self.socket.send_pyobj(self.nstate)
-                self._send_out_msgs()
 
         return initialize
 
@@ -231,6 +223,7 @@ class GiskardEngine(Engine):
         f = open(file_name, "w")
         f.write("")
         f.close()"""
+
         # 1. Wait for an incoming message.
         # 2. Check for exit.
         # 3. Handle the message.
@@ -252,6 +245,23 @@ class GiskardEngine(Engine):
         }
 
         while True:
+            if len(self.peers) > 1 and not self.genesis_proposed:
+                """ Propose chain head if it is the genesis block """
+                # TODO check what checks are necessary here by poet
+                if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
+                        and GiskardGenesisBlock() == self._get_chain_head():
+                    """ chain head is the genesis block -> propose init block """
+                    self.node.block_cache.pending_blocks.append(copy.deepcopy(self._get_chain_head()))
+                    self.nstate, lm = Giskard.propose_block_init_set(
+                        self.nstate, None, self.node.block_cache)
+                    self.socket.send_pyobj(self.nstate)
+                    self._send_out_msgs()
+
+                    for msg in lm:
+                        self.nstate = Giskard.add(self.nstate, msg)
+                        self.nstate = Giskard.process(self.nstate, msg)
+                        self._handle_prepare_block(msg)
+                self.genesis_proposed = True
             try:
                 try:
                     type_tag, data = updates.get(timeout=0.1)
@@ -304,18 +314,19 @@ class GiskardEngine(Engine):
 
     def _handle_new_block(self, block):
         self.node.block_cache.pending_blocks.append(block)
-        if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
+        """if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
                 and self.node.block_cache.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER:
             # TODO call all transitions with timeouts in mind
-            if self.inited_genesis:
-                """ chain head was the genesis block -> propose init block """
+            if not self.inited_genesis:
+                 chain head was the genesis block -> propose init block 
                 self.node.block_cache.pending_blocks.append(block)
                 self.nstate, lm = Giskard.propose_block_init_set(
                     self.nstate, None, self.node.block_cache)
+                self.inited_genesis = True
             else:
                 pass
             self.socket.send_pyobj(self.nstate)
-            self._send_out_msgs()
+            self._send_out_msgs()"""
 
         block = PoetBlock(block)
         LOGGER.info('Received %s', block)
@@ -354,7 +365,7 @@ class GiskardEngine(Engine):
         # PoET does not care about peer notifications
         #LOGGER.info("Peer msg: " + jsonpickle.decode(msg[0].content,None,None,False,True,False,GiskardMessage).__str__())
         LOGGER.info("Peer msg: " + str(msg[0].content))
-        gmsg = jsonpickle.decode(msg[0].content,None,None,False,True,False,GiskardMessage)
+        gmsg = jsonpickle.decode(msg[0].content, None, None, False, True, False, GiskardMessage)
         handlers = {
             GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
             GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
@@ -362,9 +373,13 @@ class GiskardEngine(Engine):
             GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC: self._handle_prepare_qc,
             GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC: self._handle_view_change_qc
         }
-        handle_msg = handlers[gmsg.message_type]
-        handle_msg(gmsg)
-        pass
+
+        try:
+            handle_msg = handlers[gmsg.message_type]
+        except KeyError:
+            LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
+        else:
+            handle_msg(gmsg)
 
     def _process_pending_forks(self):
         while not self._committing:
@@ -406,13 +421,18 @@ class GiskardEngine(Engine):
     def _handle_prepare_block(self, msg: GiskardMessage):
         LOGGER.info("Handle PrepareBlock")
         self.nstate.in_messages.append(msg)
-        if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, block_cache):
-            """ first block to be proposed apart from the genesis block """
-        self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
-            self.nstate, msg, self.node.block_cache)
+        # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
+        if Giskard.prepare_stage(self.nstate, msg.piggyback_block, self.peers):
+            #    """ first block to be proposed apart from the genesis block """
+            LOGGER.info("in prepare stage")
+            self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
+                self.nstate, msg, self.node.block_cache)
+        else:
+            LOGGER.info("not in prepare stage")
+            self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
+
         self.socket.send_pyobj(self.nstate)
         self._send_out_msgs()
-        pass
 
     def _handle_prepare_vote(self, msg):
         LOGGER.info("Handle PrepareVote")
@@ -424,13 +444,23 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
+        self.nstate.in_messages.append(msg)
+        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER \
+                or msg.block.block_index == 0:  # Last or genesis block
+            self.nstate, lm = Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
         pass
 
     def _handle_view_change_qc(self, msg):
         LOGGER.info("Handle ViewChangeQC")
+        self.nstate = Giskard.add(self.nstate, msg)
+        self.nstate, lm = Giskard.process_ViewChangeQC_single_set(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
         pass
 
     def _send_out_msgs(self):
         LOGGER.info("send message: " + str(len(self.nstate.out_messages)))
         for msg in self.nstate.out_messages:
+            LOGGER.info("send: " + str(msg.message_type))
             self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'), bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))
+        self.nstate.out_messages = []

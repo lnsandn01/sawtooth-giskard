@@ -38,7 +38,7 @@ class TestGiskardNetwork(unittest.TestCase):
         '''
         self._run_giskard_network_test(**{
             'processors': NodeController.intkey_config_registry,
-            'peering': NodeController.peer_to_preceding_only,
+            'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
             'rounds': 3,
             'start_nodes_per_round': 2,
