@@ -173,7 +173,9 @@ class _BlockCacheProxy:
         self.block_store = _BlockStoreProxy(service, stream)  # public
         self._service = service
         self.pending_blocks = []
-        self.latest_block_index = 0
+        self.blocks_proposed_num = 0
+        self.last_proposed_block = None
+
 
     def __eq__(self, other):
         if not isinstance(other, _BlockCacheProxy):
@@ -190,11 +192,18 @@ class _BlockCacheProxy:
         except UnknownBlock:
             return None
 
+    def remove_pending_block(self, block_id):
+        for b in self.pending_blocks:
+            if b.block_id == block_id:
+                self.pending_blocks.remove(b)
+                return
+
 
 class _BlockStoreProxy:
     def __init__(self, service, stream):
         self._service = service
         self._stream = stream
+        self.uncommitted_blocks = []
 
     def __eq__(self, other):
         if not isinstance(other, _BlockStoreProxy):
@@ -202,6 +211,12 @@ class _BlockStoreProxy:
 
         return self._service == other._service \
             and self._stream == other._stream
+
+    def remove_uncommitted_block(self, block_id):
+        for block in self.uncommitted_blocks:
+            if block.block_id == block_id:
+                self.uncommitted_blocks.remove(block)
+                return
 
     @property
     def chain_head(self):
@@ -241,6 +256,9 @@ class _BlockStoreProxy:
     def get_block_iter(self, reverse=False):
         # Ignore the reverse flag, since we can only get blocks
         # starting from the head.
+        self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
+        for block in reversed(self.uncommitted_blocks):
+            yield block
 
         chain_head = self.chain_head
 

@@ -75,14 +75,15 @@ class GiskardEngine(Engine):
         self.dishonest = False
         # if dishonest == "dishonest":
         #    dishonest = True
-        self.is_proposer = False
+        self.all_initial_blocks_proposed = False
         self.genesis_proposed = False
+        self.new_network = False
         self.peers = []
         self.k_peers = len([])
         self.node = None
         # original NState from the formal specification
         self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
-        self.inited_genesis = False
+        self.prepareQC_last_view = None
         # connection to GiskardTester, to send state updates
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()
@@ -219,6 +220,9 @@ class GiskardEngine(Engine):
         self.node = GiskardNode(validator_id, 0, self.dishonest, block_cache)
         self.nstate = NState(self.node)
         self.socket.send_pyobj(self.nstate)
+        self.new_network = self._get_chain_head() == GiskardGenesisBlock()
+        if self._get_chain_head().block_num > 3:
+            self.all_initial_blocks_proposed = True
         """file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/engine_" + validator_id + ".txt"
         f = open(file_name, "w")
         f.write("")
@@ -245,23 +249,26 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            if len(self.peers) > 1 and not self.genesis_proposed:
+            if len(self.peers) > 1 and self.new_network and not self.all_initial_blocks_proposed:
                 """ Propose chain head if it is the genesis block """
                 # TODO check what checks are necessary here by poet
-                if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
-                        and GiskardGenesisBlock() == self._get_chain_head():
+                if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):
                     """ chain head is the genesis block -> propose init block """
-                    self.node.block_cache.pending_blocks.append(copy.deepcopy(self._get_chain_head()))
-                    self.nstate, lm = Giskard.propose_block_init_set(
-                        self.nstate, None, self.node.block_cache)
-                    self.socket.send_pyobj(self.nstate)
-                    self._send_out_msgs(lm)
+                    if not self.genesis_proposed:
+                        self.node.block_cache.pending_blocks.append(copy.deepcopy(self._get_chain_head()))
+                        self.genesis_proposed = True
+                    if len(self.node.block_cache.pending_blocks) > 0:
+                        self.nstate, lm = Giskard.propose_block_init_set(
+                            self.nstate, None, self.node.block_cache)
+                        self.socket.send_pyobj(self.nstate)
+                        self._send_out_msgs(lm)
 
-                    for msg in lm:
-                        self.nstate = Giskard.add(self.nstate, msg)
-                        self.nstate = Giskard.process(self.nstate, msg)
-                        self._handle_prepare_block(msg)
-                self.genesis_proposed = True
+                        for msg in lm:
+                            self.nstate = Giskard.add(self.nstate, msg)
+                            self.nstate = Giskard.process(self.nstate, msg)
+                            self._handle_prepare_block(msg)
+                        if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER:
+                            self.all_initial_blocks_proposed = True
             try:
                 try:
                     type_tag, data = updates.get(timeout=0.1)
@@ -313,26 +320,22 @@ class GiskardEngine(Engine):
                     self._building = False
 
     def _handle_new_block(self, block):
-        self.node.block_cache.pending_blocks.append(block)
-        """if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
-                and self.node.block_cache.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER:
-            # TODO call all transitions with timeouts in mind
-            if not self.inited_genesis:
-                 chain head was the genesis block -> propose init block 
-                self.node.block_cache.pending_blocks.append(block)
-                self.nstate, lm = Giskard.propose_block_init_set(
-                    self.nstate, None, self.node.block_cache)
-                self.inited_genesis = True
-            else:
-                pass
-            self.socket.send_pyobj(self.nstate)
-            self._send_out_msgs(lm)"""
-
         block = PoetBlock(block)
         LOGGER.info('Received %s', block)
-
-        # self._check_block(block.block_id)
-        # self._validating_blocks.add(block.block_id)
+        self._check_block(block.block_id)
+        self._validating_blocks.add(block.block_id)
+        # Giskard -------------
+        # TODO check if this block was already handled by another node
+        self.node.block_cache.pending_blocks.append(block)
+        if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
+                and self.node.block_cache.blocks_proposed_num < LAST_BLOCK_INDEX_IDENTIFIER:
+            # TODO call all transitions with timeouts in mind
+            if self.all_initial_blocks_proposed:
+                lm = Giskard.make_PrepareBlocks(self.nstate, self.prepareQC_last_view, self.node.block_cache)
+                self.node.block_cache.blocks_proposed_num += len(lm)
+                self.socket.send_pyobj(self.nstate)
+                self._send_out_msgs(lm)
+        # Giskard End ---------
 
     def _handle_valid_block(self, block_id):
         self._validating_blocks.discard(block_id)
@@ -363,7 +366,7 @@ class GiskardEngine(Engine):
 
     def _handle_peer_msgs(self, msg):
         # PoET does not care about peer notifications
-        #LOGGER.info("Peer msg: " + jsonpickle.decode(msg[0].content,None,None,False,True,False,GiskardMessage).__str__())
+        # LOGGER.info("Peer msg: " + jsonpickle.decode(msg[0].content,None,None,False,True,False,GiskardMessage).__str__())
         LOGGER.info("Peer msg: " + str(msg[0].content))
         gmsg = jsonpickle.decode(msg[0].content, None, None, False, True, False, GiskardMessage)
         handlers = {
@@ -417,18 +420,25 @@ class GiskardEngine(Engine):
         self._committing = False
 
         self._process_pending_forks()
+        # Giskard -------------
+        self.node.block_cache.remove_pending_block(block_id)
+        self.node.block_cache.block_store.remove_uncommitted_block(block_id) # TODO check if also need to do this at _handle_valid_block
+        # Giskard End ---------
 
     def _handle_prepare_block(self, msg: GiskardMessage):
         LOGGER.info("Handle PrepareBlock")
+        if msg.block.block_num > 2:
+            self.all_initial_blocks_proposed = True
         self.nstate = Giskard.add(self.nstate, msg)
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
         if Giskard.prepare_stage(self.nstate, msg.piggyback_block, self.peers):
             #    """ first block to be proposed apart from the genesis block """
-            LOGGER.info("in prepare stage")
+            # TODO check if several positions needed where to append prepare blocks to the block store
+            LOGGER.info("parent in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
                 self.nstate, msg, self.node.block_cache)
         else:
-            LOGGER.info("not in prepare stage")
+            LOGGER.info("parent not in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
 
         self.socket.send_pyobj(self.nstate)
@@ -440,6 +450,8 @@ class GiskardEngine(Engine):
         # TODO replace with new get transition function
         if Giskard.prepare_stage(self.nstate, msg.block, self.peers):
             LOGGER.info("prepvote in prep stage")
+            if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
+                self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
             self.nstate, lm = Giskard.process_PrepareVote_vote_set(
                 self.nstate, msg, self.node.block_cache)
         else:
@@ -456,14 +468,16 @@ class GiskardEngine(Engine):
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
         self.nstate = Giskard.add(self.nstate, msg)
-        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER \
-                or msg.block.block_index == 0:  # Last or genesis block
+        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:# \
+               # or msg.block.block_index == 0:  # Last or genesis block
+            self.prepareQC_last_view = msg
             if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("last block new proposer")
+                self.node.block_cache.blocks_proposed_num = 0  # resest proposed blocks count
                 self.nstate, lm = \
                     Giskard.process_PrepareQC_last_block_new_proposer_set(
-                        self.nstate, msg, self.node.block_cache)
-                lm = [] # TODO replace as soon as i can continue with proposing new blocks
+                        self.nstate, msg, self.node.block_cache)  # TODO prolong sending state update until all 3 blocks sent?
+                self.node.block_cache.blocks_proposed_num += len(lm)  # for the case less than 3 blocks were proposed
             else:
                 LOGGER.info("last block no new proposer")
                 self.nstate, lm = \
@@ -484,6 +498,8 @@ class GiskardEngine(Engine):
     def _send_out_msgs(self, lm):
         LOGGER.info("send message: " + str(len(lm)))
         for msg in lm:
-            LOGGER.info("node: "+self._validator_connect[-1] +" broadcasting: " + str(msg.message_type) + " block: " + str(msg.block.block_num))
+            LOGGER.info(
+                "node: " + self._validator_connect[-1] + " broadcasting: " + str(msg.message_type) + " block: " + str(
+                    msg.block.block_num))
             self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'),
                                     bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))

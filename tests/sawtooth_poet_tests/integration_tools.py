@@ -242,12 +242,19 @@ class BlockCacheMock:
     def __init__(self, blocks):
         self.block_store = BlockStoreMock(blocks)
         self.pending_blocks = []
-        self.latest_block_index = 0
+        self.blocks_proposed = 0
 
 
 class BlockStoreMock:
     def __init__(self, blocks):
         self.blocks = blocks
+        self.uncommitted_blocks = []
+
+    def remove_uncommitted_block(self, block_id):
+        for block in self.uncommitted_blocks:
+            if block.block_id == block_id:
+                self.uncommitted_blocks.remove(block)
+                return
 
     @property
     def chain_head(self):
@@ -270,6 +277,11 @@ class BlockStoreMock:
         return None
 
     def get_block_iter(self):
+
+        self.uncommitted_blocks.sort(lambda b1: b1.block_num)
+        for block in reversed(self.uncommitted_blocks):
+            yield block
+
         chain_head = self.chain_head
 
         yield chain_head

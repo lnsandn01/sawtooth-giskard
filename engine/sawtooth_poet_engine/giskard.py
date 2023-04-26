@@ -338,7 +338,7 @@ class Giskard:
         msg: GiskardMessage
         for msg in state.out_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
-                and msg.block == b:
+                    and msg.block == b:
                 return True
         return False
 
@@ -517,9 +517,23 @@ class Giskard:
         - they are processed at the same time, and
         - we falsely enforce the discipline that the second proposed block contains the first
           block's PrepareQC when in fact it has not reached PrepareQC. """
+        # You don't always have 3 blocks at this point
+        if len(block_cache.pending_blocks) < 3:
+            messages = []
+            block_index = 0
+            while len(block_cache.pending_blocks) > 0 and block_index < 3:
+                block_index += 1
+                block = Giskard.generate_new_block(previous_msg.block, block_cache, block_index)
+                messages.append(GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                               state.node_view,
+                                               state.node_id,
+                                               block,
+                                               previous_msg.block))
+            return messages
+
         block1 = Giskard.generate_new_block(previous_msg.block, block_cache, 1)
         block2 = Giskard.generate_new_block(block1, block_cache, 2)
-        block3 = Giskard.generate_last_block(block1, block_cache)  # labeled as last block in view
+        block3 = Giskard.generate_last_block(block2, block_cache)  # labeled as last block in view
         return [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                state.node_view,
                                state.node_id,
@@ -662,13 +676,23 @@ class Giskard:
             sometimes there are no 3 blocks ready for preperation, 
             so they are generated and send of one after another"""
             lm = []
-            while block_cache.latest_block_index < LAST_BLOCK_INDEX_IDENTIFIER \
-                    and len(block_cache.pending_blocks) != 0:
-                if block_cache.pending_blocks[0] != GiskardGenesisBlock():
-                    block_cache.latest_block_index += 1  # do not increase the counter when the first block was the genesis block
+            while block_cache.blocks_proposed_num < LAST_BLOCK_INDEX_IDENTIFIER \
+                    and len(block_cache.pending_blocks) > 0:
+                # if block_cache.pending_blocks[0] != GiskardGenesisBlock():
+                # block_cache.blocks_proposed += 1  # do not increase the counter when the first block was the genesis block
                 # TODO solve problem with only having one block at a time in pending_blocks
+                if block_cache.last_proposed_block is None:
+                    previous_msg = Giskard.GenesisBlock_message(state)
+                else:
+                    previous_msg = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                                  state.node_view,
+                                                  state.node_id,
+                                                  block_cache.last_proposed_block,
+                                                  Giskard.GenesisBlock_message(state))
                 msg = Giskard.make_PrepareBlock(
-                    state, Giskard.GenesisBlock_message(state), block_cache, block_cache.latest_block_index)
+                    state, previous_msg, block_cache, block_cache.blocks_proposed_num)
+                block_cache.blocks_proposed_num += 1
+                block_cache.last_proposed_block = msg.block
                 lm.append(msg)
                 state_prime = Giskard.record(state, msg)
             return [state_prime, lm]
@@ -676,7 +700,7 @@ class Giskard:
         lm = [Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)]
         state_prime = Giskard.record_plural(
             state, lm)
-        block_cache.latest_block_index = 3
+        block_cache.blocks_proposed_num = 3
 
         return [state_prime, lm]
 
@@ -850,7 +874,8 @@ class Giskard:
         """ Increment the view, propose next block """
         return state_prime == \
             Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
-                                  Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)) \
+                                  Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg,
+                                                             block_cache)) \
             and lm == Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache) \
             and Giskard.received(state, msg) \
             and Giskard.honest_node(node) \
