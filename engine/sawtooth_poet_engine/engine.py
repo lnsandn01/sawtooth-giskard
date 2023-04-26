@@ -255,7 +255,7 @@ class GiskardEngine(Engine):
                     self.nstate, lm = Giskard.propose_block_init_set(
                         self.nstate, None, self.node.block_cache)
                     self.socket.send_pyobj(self.nstate)
-                    self._send_out_msgs()
+                    self._send_out_msgs(lm)
 
                     for msg in lm:
                         self.nstate = Giskard.add(self.nstate, msg)
@@ -326,7 +326,7 @@ class GiskardEngine(Engine):
             else:
                 pass
             self.socket.send_pyobj(self.nstate)
-            self._send_out_msgs()"""
+            self._send_out_msgs(lm)"""
 
         block = PoetBlock(block)
         LOGGER.info('Received %s', block)
@@ -420,7 +420,7 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_block(self, msg: GiskardMessage):
         LOGGER.info("Handle PrepareBlock")
-        self.nstate.in_messages.append(msg)
+        self.nstate = Giskard.add(self.nstate, msg)
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
         if Giskard.prepare_stage(self.nstate, msg.piggyback_block, self.peers):
             #    """ first block to be proposed apart from the genesis block """
@@ -432,35 +432,58 @@ class GiskardEngine(Engine):
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
 
         self.socket.send_pyobj(self.nstate)
-        self._send_out_msgs()
+        self._send_out_msgs(lm)
 
     def _handle_prepare_vote(self, msg):
         LOGGER.info("Handle PrepareVote")
-        pass
+        self.nstate = Giskard.add(self.nstate, msg)
+        # TODO replace with new get transition function
+        if Giskard.prepare_stage(self.nstate, msg.block, self.peers):
+            LOGGER.info("prepvote in prep stage")
+            self.nstate, lm = Giskard.process_PrepareVote_vote_set(
+                self.nstate, msg, self.node.block_cache)
+        else:
+            LOGGER.info("prepvote not in prep stage")
+            self.nstate, lm = Giskard.process_PrepareVote_wait_set(
+                self.nstate, msg, self.node.block_cache)
+        self.socket.send_pyobj(self.nstate)
+        self._send_out_msgs(lm)
 
     def _handle_view_change(self, msg):
         LOGGER.info("Handle ViewChange")
-        pass
+        self.nstate = Giskard.add(self.nstate, msg)
 
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
-        self.nstate.in_messages.append(msg)
+        self.nstate = Giskard.add(self.nstate, msg)
         if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER \
                 or msg.block.block_index == 0:  # Last or genesis block
-            self.nstate, lm = Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
+            if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
+                LOGGER.info("last block new proposer")
+                self.nstate, lm = \
+                    Giskard.process_PrepareQC_last_block_new_proposer_set(
+                        self.nstate, msg, self.node.block_cache)
+                lm = [] # TODO replace as soon as i can continue with proposing new blocks
+            else:
+                LOGGER.info("last block no new proposer")
+                self.nstate, lm = \
+                    Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
+        else:
+            LOGGER.info("non-last block")
+            self.nstate, lm = Giskard.process_PrepareQC_non_last_block_set(
+                self.nstate, msg, self.node.block_cache)
         self.socket.send_pyobj(self.nstate)
-        pass
+        self._send_out_msgs(lm)
 
     def _handle_view_change_qc(self, msg):
         LOGGER.info("Handle ViewChangeQC")
         self.nstate = Giskard.add(self.nstate, msg)
         self.nstate, lm = Giskard.process_ViewChangeQC_single_set(self.nstate, msg)
         self.socket.send_pyobj(self.nstate)
-        pass
 
-    def _send_out_msgs(self):
+    def _send_out_msgs(self, lm):
         LOGGER.info("send message: " + str(len(self.nstate.out_messages)))
-        for msg in self.nstate.out_messages:
+        for msg in lm:
             LOGGER.info("send: " + str(msg.message_type))
-            self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'), bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))
-        self.nstate.out_messages = []
+            self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'),
+                                    bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))

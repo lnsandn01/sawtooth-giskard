@@ -312,7 +312,7 @@ class Giskard:
         msg: GiskardBlock
         for msg in state.out_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
-                    and b.block_num == msg.block_num \
+                    and b.block_num == msg.block.block_num \
                     and b != msg.block:
                 return True
         return False
@@ -322,7 +322,7 @@ class Giskard:
         msg: GiskardBlock
         for msg in state.counting_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
-                    and b.block_num == msg.block_num \
+                    and b.block_num == msg.block.block_num \
                     and b != msg.block:
                 return True
         return False
@@ -330,7 +330,7 @@ class Giskard:
     @staticmethod
     def same_height_block_msg(b: GiskardBlock, msg: GiskardMessage) -> bool:
         return msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
-            and b.block_num == msg.block_num \
+            and b.block_num == msg.block.block_num \
             and b != msg.block
 
     # endregion
@@ -628,11 +628,14 @@ class Giskard:
 
     @staticmethod
     def propose_block_init(state: NState, msg: GiskardMessage,
-                           state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+                           state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
         """ Returns True when a node transitioned to proposing blocks """
         return state_prime == \
-            Giskard.record_plural(state, Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state))) \
-            and lm == Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state)) \
+            Giskard.record_plural(
+                state,
+                Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)) \
+            and lm == Giskard.make_PrepareBlocks(
+                state, Giskard.GenesisBlock_message(state), block_cache) \
             and state == NState(None, 0, state.node_id) \
             and Giskard.honest_node(node) \
             and Giskard.is_block_proposer(node) \
@@ -809,9 +812,9 @@ class Giskard:
 
     @staticmethod
     def process_PrepareVote_vote_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
-        lm = [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache)]
+        lm = [Giskard.make_PrepareQC(state, msg)] + Giskard.pending_PrepareVote(state, msg, block_cache)
         state_prime = Giskard.process(Giskard.record_plural(
-            state, [Giskard.make_PrepareQC(state, msg), Giskard.pending_PrepareVote(state, msg, block_cache)]), msg)
+            state, lm), msg)
         return [state_prime, lm]
 
     """ PrepareQC message-related actions """
@@ -829,12 +832,13 @@ class Giskard:
 
     @staticmethod
     def process_PrepareQC_last_block_new_proposer(state: NState, msg: GiskardMessage,
-                                                  state_prime: NState, lm: List[GiskardMessage], node) -> bool:
+                                                  state_prime: NState, lm: List[GiskardMessage],
+                                                  node, block_cache) -> bool:
         """ Increment the view, propose next block """
         return state_prime == \
             Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
-                                  Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)) \
-            and lm == Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg) \
+                                  Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)) \
+            and lm == Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache) \
             and Giskard.received(state, msg) \
             and Giskard.honest_node(node) \
             and msg.message_type == Message.CONSENSUS_GISKARD_PREPARE_QC \
@@ -843,12 +847,11 @@ class Giskard:
             and Giskard.is_block_proposer(node, state.node_view + 1)
 
     @staticmethod
-    def process_PrepareQC_last_block_new_proposer_set(state: NState, msg: GiskardMessage) -> [NState,
-                                                                                              List[GiskardMessage]]:
-        lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
+    def process_PrepareQC_last_block_new_proposer_set(state: NState, msg: GiskardMessage,
+                                                      block_cache) -> [NState, List[GiskardMessage]]:
+        lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
-                                            Giskard.make_PrepareBlocks(
-                                                Giskard.increment_view(Giskard.process(state, msg)), msg))
+                                            lm)
         return [state_prime, lm]
 
     @staticmethod
@@ -1162,7 +1165,7 @@ class Giskard:
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
             return Giskard.process_PrepareVote_wait(state, msg, state_prime, lm, node, block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
-            return Giskard.process_PrepareQC_last_block_new_proposer(state, msg, state_prime, lm, node)
+            return Giskard.process_PrepareQC_last_block_new_proposer(state, msg, state_prime, lm, node, block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
             return Giskard.process_PrepareQC_last_block(state, msg, state_prime, lm, node)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
@@ -1216,10 +1219,10 @@ class Giskard:
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
             msg = state.in_messages[len(state.in_messages) - 1]
-            lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
+            lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
             msg = state.in_messages[len(state.in_messages) - 1]
-            lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg)
+            lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
             msg = state.in_messages[len(state.in_messages) - 1]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, peers)
