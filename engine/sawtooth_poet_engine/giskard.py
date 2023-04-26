@@ -309,7 +309,7 @@ class Giskard:
     @staticmethod
     def exists_same_height_block(state: NState, b: GiskardBlock) -> bool:
         """ Returns True if there is a block in the out_messages buffer with the same height """
-        msg: GiskardBlock
+        msg: GiskardMessage
         for msg in state.out_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
                     and b.block_num == msg.block.block_num \
@@ -319,7 +319,7 @@ class Giskard:
 
     @staticmethod
     def exists_same_height_PrepareBlock(state: NState, b: GiskardBlock) -> bool:
-        msg: GiskardBlock
+        msg: GiskardMessage
         for msg in state.counting_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
                     and b.block_num == msg.block.block_num \
@@ -332,6 +332,15 @@ class Giskard:
         return msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and b.block_num == msg.block.block_num \
             and b != msg.block
+
+    @staticmethod
+    def prepare_vote_already_sent(state: NState, b: GiskardBlock) -> bool:
+        msg: GiskardMessage
+        for msg in state.out_messages:
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
+                and msg.block == b:
+                return True
+        return False
 
     # endregion
 
@@ -563,12 +572,16 @@ class Giskard:
         - a <<PrepareBlock>> message exists for the child block.
 
         Constructing pending PrepareVote messages for child messages with existing PrepareBlocks. """
+        """CHANGE from the verification code
+        here do I check for if a prepare vote has been already sent,
+        this check is nowhere to be found in the coq code"""
         return list(map(lambda prepare_block_msg:
                         Giskard.make_PrepareVote(state, quorum_msg, prepare_block_msg),
                         filter(lambda msg: msg.view == quorum_msg.view
                                            and not Giskard.exists_same_height_block(state, msg.block)
                                            and Giskard.parent_ofb(msg.block, quorum_msg.block, block_cache)
-                                           and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                                           and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK
+                                           and not Giskard.prepare_vote_already_sent(state, quorum_msg.block),
                                state.counting_messages)))
 
     @staticmethod

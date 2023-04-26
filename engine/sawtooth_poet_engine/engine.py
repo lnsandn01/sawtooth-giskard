@@ -482,8 +482,8 @@ class GiskardEngine(Engine):
         self.socket.send_pyobj(self.nstate)
 
     def _send_out_msgs(self, lm):
-        LOGGER.info("send message: " + str(len(self.nstate.out_messages)))
+        LOGGER.info("send message: " + str(len(lm)))
         for msg in lm:
-            LOGGER.info("send: " + str(msg.message_type))
+            LOGGER.info("node: "+self._validator_connect[-1] +" broadcasting: " + str(msg.message_type) + " block: " + str(msg.block.block_num))
             self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'),
                                     bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))
