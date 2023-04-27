@@ -293,7 +293,7 @@ class _BlockStoreProxy:
         """
         for block in self.get_block_iter():
             if child_block.previous_id == block.block_id \
-                    and child_block.block_num + 1 == block.block_num:
+                    and child_block.block_num - 1 == block.block_num:
                 return GiskardBlock(block)
             if block.block_num <= child_block.block_num:
                 return None
@@ -307,7 +307,7 @@ class _BlockStoreProxy:
         """
         for block in self.get_block_iter():
             if parent_block.block_id == block.previous_id \
-                    and parent_block.block_num - 1 == block.block_num:
+                    and parent_block.block_num + 1 == block.block_num:
                 return GiskardBlock(block)
             if block.block_num <= parent_block.block_num:
                 return None

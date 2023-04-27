@@ -264,10 +264,10 @@ class GiskardEngine(Engine):
                         self._send_out_msgs(lm)
 
                         for msg in lm:
-                            self.nstate = Giskard.add(self.nstate, msg)
-                            self.nstate = Giskard.process(self.nstate, msg)
+                            #self.nstate = Giskard.add(self.nstate, msg)
+                            #self.nstate = Giskard.process(self.nstate, msg)
                             self._handle_prepare_block(msg)
-                        if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER:
+                        if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER+1:
                             self.all_initial_blocks_proposed = True
             try:
                 try:
@@ -435,8 +435,13 @@ class GiskardEngine(Engine):
             #    """ first block to be proposed apart from the genesis block """
             # TODO check if several positions needed where to append prepare blocks to the block store
             LOGGER.info("parent in prepare stage")
+            if msg.piggyback_block not in self.node.block_cache.block_store.uncommitted_blocks:
+                self.node.block_cache.block_store.uncommitted_blocks.append(msg.piggyback_block)
+            #if msg.block.block_num == 2 \
+            #        and self._validator_connect[-1] == "0":
+            #    import pdb; pdb.set_trace()
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
-                self.nstate, msg, self.node.block_cache)
+                self.nstate, msg, self.node.block_cache, self.peers)
         else:
             LOGGER.info("parent not in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
@@ -448,7 +453,7 @@ class GiskardEngine(Engine):
         LOGGER.info("Handle PrepareVote")
         self.nstate = Giskard.add(self.nstate, msg)
         # TODO replace with new get transition function
-        if Giskard.prepare_stage(self.nstate, msg.block, self.peers):
+        if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, self.peers):
             LOGGER.info("prepvote in prep stage")
             if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
                 self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
@@ -456,6 +461,10 @@ class GiskardEngine(Engine):
                 self.nstate, msg, self.node.block_cache)
         else:
             LOGGER.info("prepvote not in prep stage")
+            if Giskard.vote_quorum_in_view(self.nstate, 0, msg.block, self.peers):
+                LOGGER.info("but got vote quorum")
+            else:
+                LOGGER.info("no vote quorum")
             self.nstate, lm = Giskard.process_PrepareVote_wait_set(
                 self.nstate, msg, self.node.block_cache)
         self.socket.send_pyobj(self.nstate)

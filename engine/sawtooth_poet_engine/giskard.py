@@ -359,12 +359,18 @@ class Giskard:
         """ Processed PrepareVote messages in some view about some block: """
         return list(filter(lambda msg: msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE
                                        and msg.block == b
-                                       and msg.view == view, state.counting_messages))
-
+                                       and msg.view == view, state.counting_messages + state.out_messages))
+    
     @staticmethod
     def vote_quorum_in_view(state: NState, view: int, b: GiskardBlock, peers) -> bool:
         """ Returns True if there is a vote quorum in the given view, for the given block """
         return Giskard.quorum(Giskard.processed_PrepareVote_in_view_about_block(state, view, b), peers)
+
+    @staticmethod
+    def get_vote_quorum_msg_in_view(state: NState, view: int, b: GiskardBlock, peers) -> GiskardMessage:
+        """ Returns True if there is a vote quorum in the given view, for the given block """
+        if Giskard.quorum(Giskard.processed_PrepareVote_in_view_about_block(state, view, b), peers):
+            return Giskard.processed_PrepareVote_in_view_about_block(state, view, b)[-1]
 
     @staticmethod
     def PrepareQC_in_view(state: NState, view: int, b: GiskardBlock) -> bool:
@@ -376,6 +382,17 @@ class Giskard:
                     and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
                 return True
         return False
+    
+    @staticmethod
+    def get_PrepareQC_in_view(state: NState, view: int, b: GiskardBlock) -> GiskardMessage:
+        """ Returns True if there is a PrepareQC message in the counting_blocks buffer,
+        for the given block and view """
+        for msg in state.counting_messages:
+            if msg.view == view \
+                    and msg.block == b \
+                    and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+                return msg
+        return None
 
     @staticmethod
     def prepare_stage_in_view(state: NState, view: int, b: GiskardBlock, peers) -> bool:
@@ -395,6 +412,27 @@ class Giskard:
                 return True
             v_prime -= 1
         return False
+    
+    @staticmethod
+    def get_quorum_msg_in_view(state: NState, view: int, b: GiskardBlock, peers) -> GiskardMessage:
+        """ Returns the PrepareQC or vote-quorum msg for the given block,
+         if there is one in the given view """
+        if Giskard.PrepareQC_in_view(state, view, b):
+            return Giskard.get_PrepareQC_in_view(state, view, b)
+        return Giskard.get_vote_quorum_msg_in_view(state, view, b, peers) 
+
+    @staticmethod
+    def get_quorum_msg_for_block(state: NState, b: GiskardBlock, peers) -> GiskardMessage:
+        """ Returns the PrepareQC or Vote-quorum msg for the given block,
+         if there is one """
+        if b == GiskardGenesisBlock():
+            return Giskard.GenesisBlock_message(state)
+        v_prime = state.node_view
+        while v_prime >= 0:
+            if Giskard.prepare_stage_in_view(state, v_prime, b, peers):
+                return Giskard.get_quorum_msg_in_view(state, v_prime, b, peers)
+            v_prime -= 1
+        return None
 
     # endregion
 
@@ -595,7 +633,7 @@ class Giskard:
                                            and not Giskard.exists_same_height_block(state, msg.block)
                                            and Giskard.parent_ofb(msg.block, quorum_msg.block, block_cache)
                                            and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK
-                                           and not Giskard.prepare_vote_already_sent(state, quorum_msg.block),
+                                           and not Giskard.prepare_vote_already_sent(state, msg.block),
                                state.counting_messages)))
 
     @staticmethod
@@ -671,12 +709,13 @@ class Giskard:
     @staticmethod
     def propose_block_init_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
         """ Actually does the transition to propose blocks """
-        if len(block_cache.pending_blocks) < 3:
+        if len(block_cache.pending_blocks) < 4:
             """CHANGE from the original specification
             sometimes there are no 3 blocks ready for preperation, 
             so they are generated and send of one after another"""
             lm = []
-            while block_cache.blocks_proposed_num < LAST_BLOCK_INDEX_IDENTIFIER \
+            state_prime = state
+            while block_cache.blocks_proposed_num <= LAST_BLOCK_INDEX_IDENTIFIER \
                     and len(block_cache.pending_blocks) > 0:
                 # if block_cache.pending_blocks[0] != GiskardGenesisBlock():
                 # block_cache.blocks_proposed += 1  # do not increase the counter when the first block was the genesis block
@@ -700,7 +739,7 @@ class Giskard:
         lm = [Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)]
         state_prime = Giskard.record_plural(
             state, lm)
-        block_cache.blocks_proposed_num = 3
+        block_cache.blocks_proposed_num = 4
 
         return [state_prime, lm]
 
@@ -803,8 +842,9 @@ class Giskard:
 
     @staticmethod
     def process_PrepareBlock_vote_set(state: NState, msg: GiskardMessage,
-                                      block_cache) -> [NState, List[GiskardMessage]]:
-        lm = Giskard.pending_PrepareVote(state, msg, block_cache)
+                                      block_cache, peers) -> [NState, List[GiskardMessage]]:
+        quorum_msg = Giskard.get_quorum_msg_for_block(state, msg.piggyback_block, peers)
+        lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
         return [state_prime, lm]
 
