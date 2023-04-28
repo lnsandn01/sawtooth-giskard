@@ -35,7 +35,7 @@ class Giskard:
         if len(peers) == 1:
             return True
         position_in_peers = peers.index(node.node_id)
-        return position_in_peers == view % (len(peers) - 1)  # TODO check where view starts 0,1
+        return (position_in_peers + 1) % len(peers) == (view + 1) % len(peers)  # TODO check where view starts 0,1
 
     # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
     # endregion
@@ -736,7 +736,7 @@ class Giskard:
             return [state_prime, lm]
         previous_msg = Giskard.GenesisBlock_message(state)
         msg = Giskard.make_PrepareBlock(
-            state, previous_msg, block_cache, block_cache.blocks_proposed_num)
+            state, previous_msg, block_cache, 0)
         lm = [msg] + Giskard.make_PrepareBlocks(state, msg, block_cache)
         state_prime = Giskard.record_plural(
             state, lm)

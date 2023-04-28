@@ -44,7 +44,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'start_nodes_per_round': 2,
             'stop_nodes_per_round': 0,
             'batches': 12,
-            'time_between_batches': 100,
+            'time_between_batches': 10,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,
                 'initial_wait_time': 100.0,

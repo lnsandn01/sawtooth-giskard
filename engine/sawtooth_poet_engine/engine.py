@@ -260,6 +260,7 @@ class GiskardEngine(Engine):
                     if len(self.node.block_cache.pending_blocks) > 0:
                         self.nstate, lm = Giskard.propose_block_init_set(
                             self.nstate, None, self.node.block_cache)
+                        LOGGER.info("propose new block from while check: count msgs: " + str(len(lm)))
                         self.socket.send_pyobj(self.nstate)
                         self._send_out_msgs(lm)
 
@@ -267,6 +268,7 @@ class GiskardEngine(Engine):
                             self._handle_prepare_block(msg)
                         if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER+1:
                             self.all_initial_blocks_proposed = True
+                            LOGGER.info("all initial blocks proposed")
             try:
                 try:
                     type_tag, data = updates.get(timeout=0.1)
@@ -333,6 +335,9 @@ class GiskardEngine(Engine):
                 self.node.block_cache.blocks_proposed_num += len(lm)
                 self.socket.send_pyobj(self.nstate)
                 self._send_out_msgs(lm)
+                for msg in lm:
+                    self._handle_prepare_block(msg)
+                LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
         # Giskard End ---------
 
     def _handle_valid_block(self, block_id):
@@ -478,14 +483,14 @@ class GiskardEngine(Engine):
                # or msg.block.block_index == 0:  # Last or genesis block
             self.prepareQC_last_view = msg
             if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
-                LOGGER.info("last block new proposer")
+                LOGGER.info("last block new proposer node: " + self._validator_connect[-1])
                 self.node.block_cache.blocks_proposed_num = 0  # resest proposed blocks count
                 self.nstate, lm = \
                     Giskard.process_PrepareQC_last_block_new_proposer_set(
                         self.nstate, msg, self.node.block_cache)  # TODO prolong sending state update until all 3 blocks sent?
                 self.node.block_cache.blocks_proposed_num += len(lm)  # for the case less than 3 blocks were proposed
             else:
-                LOGGER.info("last block no new proposer")
+                LOGGER.info("last block no new proposer node: " + self._validator_connect[-1])
                 self.nstate, lm = \
                     Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
         else:
