@@ -264,8 +264,6 @@ class GiskardEngine(Engine):
                         self._send_out_msgs(lm)
 
                         for msg in lm:
-                            #self.nstate = Giskard.add(self.nstate, msg)
-                            #self.nstate = Giskard.process(self.nstate, msg)
                             self._handle_prepare_block(msg)
                         if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER+1:
                             self.all_initial_blocks_proposed = True
@@ -325,7 +323,7 @@ class GiskardEngine(Engine):
         self._check_block(block.block_id)
         self._validating_blocks.add(block.block_id)
         # Giskard -------------
-        # TODO check if this block was already handled by another node
+        # TODO check if this block was already proposed
         self.node.block_cache.pending_blocks.append(block)
         if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
                 and self.node.block_cache.blocks_proposed_num < LAST_BLOCK_INDEX_IDENTIFIER:
@@ -433,7 +431,6 @@ class GiskardEngine(Engine):
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
         if Giskard.prepare_stage(self.nstate, msg.piggyback_block, self.peers):
             #    """ first block to be proposed apart from the genesis block """
-            # TODO check if several positions needed where to append prepare blocks to the block store
             LOGGER.info("parent in prepare stage")
             if msg.piggyback_block not in self.node.block_cache.block_store.uncommitted_blocks:
                 self.node.block_cache.block_store.uncommitted_blocks.append(msg.piggyback_block)

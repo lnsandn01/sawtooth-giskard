@@ -43,9 +43,8 @@ class Giskard:
     # region block methods
     @staticmethod
     def generate_new_block(parent_block: GiskardBlock, block_cache,
-                           block_index) -> GiskardBlock:  # TODO determine the block index via parent relation i guess via hash from parent
-        """waits for a new block to be received from the validator
-        TODO block as input is the parent block -> have to get the new child block from the handler in engine """
+                           block_index) -> GiskardBlock:
+        """waits for a new block to be received from the validator """
         if len(block_cache.pending_blocks) == 0:
             return None
         pending_block = block_cache.pending_blocks.pop(0)
@@ -735,8 +734,10 @@ class Giskard:
                 lm.append(msg)
                 state_prime = Giskard.record(state, msg)
             return [state_prime, lm]
-        """ TODO added genesis msg here to outbuffer, is that correct? """
-        lm = [Giskard.make_PrepareBlocks(state, Giskard.GenesisBlock_message(state), block_cache)]
+        previous_msg = Giskard.GenesisBlock_message(state)
+        msg = Giskard.make_PrepareBlock(
+            state, previous_msg, block_cache, block_cache.blocks_proposed_num)
+        lm = [msg] + Giskard.make_PrepareBlocks(state, msg, block_cache)
         state_prime = Giskard.record_plural(
             state, lm)
         block_cache.blocks_proposed_num = 4
@@ -843,6 +844,9 @@ class Giskard:
     @staticmethod
     def process_PrepareBlock_vote_set(state: NState, msg: GiskardMessage,
                                       block_cache, peers) -> [NState, List[GiskardMessage]]:
+        """CHANGE from the original specification
+        PrepareBlockmsg is passed in, but we also need the quorum msg
+        + pending_PrepareVote requires the msg to be in the counting msg buffer"""
         quorum_msg = Giskard.get_quorum_msg_for_block(state, msg.piggyback_block, peers)
         lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
