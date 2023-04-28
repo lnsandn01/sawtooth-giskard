@@ -332,12 +332,12 @@ class GiskardEngine(Engine):
             # TODO call all transitions with timeouts in mind
             if self.all_initial_blocks_proposed:
                 lm = Giskard.make_PrepareBlocks(self.nstate, self.prepareQC_last_view, self.node.block_cache)
+                LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
                 self.node.block_cache.blocks_proposed_num += len(lm)
                 self.socket.send_pyobj(self.nstate)
                 self._send_out_msgs(lm)
                 for msg in lm:
                     self._handle_prepare_block(msg)
-                LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
         # Giskard End ---------
 
     def _handle_valid_block(self, block_id):
@@ -430,7 +430,7 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_block(self, msg: GiskardMessage):
         LOGGER.info("Handle PrepareBlock")
-        if msg.block.block_num > 2:
+        if msg.block.block_num >= 3:
             self.all_initial_blocks_proposed = True
         self.nstate = Giskard.add(self.nstate, msg)
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
@@ -439,7 +439,7 @@ class GiskardEngine(Engine):
             LOGGER.info("parent in prepare stage")
             if msg.piggyback_block not in self.node.block_cache.block_store.uncommitted_blocks:
                 self.node.block_cache.block_store.uncommitted_blocks.append(msg.piggyback_block)
-            #if msg.block.block_num == 2 \
+            #if msg.block.block_num == 4 \
             #        and self._validator_connect[-1] == "0":
             #    import pdb; pdb.set_trace()
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
@@ -499,6 +499,9 @@ class GiskardEngine(Engine):
                 self.nstate, msg, self.node.block_cache)
         self.socket.send_pyobj(self.nstate)
         self._send_out_msgs(lm)
+        for msg in lm:
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
+                self._handle_prepare_block(msg)
 
     def _handle_view_change_qc(self, msg):
         LOGGER.info("Handle ViewChangeQC")

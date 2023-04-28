@@ -626,10 +626,12 @@ class Giskard:
         """CHANGE from the verification code
         here do I check for if a prepare vote has been already sent,
         this check is nowhere to be found in the coq code"""
+        """ CHANGE from the original specification
+        lambda msg: msg.view == quorum_msg.view removed, why is that there makes no sense,
+        hinders voting for the first block of a new view"""
         return list(map(lambda prepare_block_msg:
                         Giskard.make_PrepareVote(state, quorum_msg, prepare_block_msg),
-                        filter(lambda msg: msg.view == quorum_msg.view
-                                           and not Giskard.exists_same_height_block(state, msg.block)
+                        filter(lambda msg: not Giskard.exists_same_height_block(state, msg.block)
                                            and Giskard.parent_ofb(msg.block, quorum_msg.block, block_cache)
                                            and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK
                                            and not Giskard.prepare_vote_already_sent(state, msg.block),

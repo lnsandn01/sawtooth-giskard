@@ -113,6 +113,8 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nsent batches alternating\n\n")
             self.send_txns_all_at_once(batches, time_between_batches)
             LOGGER.info("\n\nsent batches\n\n")
+            while not giskard_tester.exited:
+                time.sleep(0.1)
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
             self.stop_nodes(stop_nodes_per_round)
