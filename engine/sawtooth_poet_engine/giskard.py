@@ -50,14 +50,11 @@ class Giskard:
         pending_block = block_cache.pending_blocks.pop(0)
         if pending_block == GiskardGenesisBlock():
             block_index = 0
-            block_num = 0
-        else:
-            block_num = parent_block.block_num + 1
 
         new_block = Block(pending_block.block_id,
                           parent_block.block_id,
                           pending_block.signer_id,
-                          block_num,
+                          pending_block.block_num,
                           pending_block.payload,
                           pending_block.summary)
         return GiskardBlock(new_block, block_index)
