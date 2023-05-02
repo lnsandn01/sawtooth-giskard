@@ -278,7 +278,7 @@ class BlockStoreMock:
 
     def get_block_iter(self):
 
-        self.uncommitted_blocks.sort(lambda b1: b1.block_num)
+        self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
         for block in reversed(self.uncommitted_blocks):
             yield block
 

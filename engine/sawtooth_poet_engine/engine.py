@@ -265,6 +265,8 @@ class GiskardEngine(Engine):
                         self._send_out_msgs(lm)
 
                         for msg in lm:
+                            if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
+                                self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
                             self._handle_prepare_block(msg)
                         if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER+1:
                             self.all_initial_blocks_proposed = True
@@ -331,7 +333,11 @@ class GiskardEngine(Engine):
                 and self.node.block_cache.blocks_proposed_num < LAST_BLOCK_INDEX_IDENTIFIER:
             # TODO call all transitions with timeouts in mind
             if self.all_initial_blocks_proposed:
-                lm = Giskard.make_PrepareBlocks(self.nstate, self.prepareQC_last_view, self.node.block_cache)
+                parent_block = self.node.block_cache.block_store.get_parent_block(block)
+                lm = Giskard.make_PrepareBlocks(
+                    self.nstate,
+                    Giskard.adhoc_ParentBlock_msg(self.nstate, parent_block),
+                    self.node.block_cache)
                 LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
                 self.node.block_cache.blocks_proposed_num += len(lm)
                 self.socket.send_pyobj(self.nstate)
@@ -424,8 +430,8 @@ class GiskardEngine(Engine):
 
         self._process_pending_forks()
         # Giskard -------------
-        self.node.block_cache.remove_pending_block(block_id)
-        self.node.block_cache.block_store.remove_uncommitted_block(block_id) # TODO check if also need to do this at _handle_valid_block
+        #self.node.block_cache.remove_pending_block(block_id)
+        #self.node.block_cache.block_store.remove_uncommitted_block(block_id) # TODO check if also need to do this at _handle_valid_block
         # Giskard End ---------
 
     def _handle_prepare_block(self, msg: GiskardMessage):
@@ -433,13 +439,21 @@ class GiskardEngine(Engine):
         if msg.block.block_num >= 3:
             self.all_initial_blocks_proposed = True
         self.nstate = Giskard.add(self.nstate, msg)
+        if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
+            self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
+        self.node.block_cache.remove_pending_block(msg.block.block_id)
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
-        if Giskard.prepare_stage(self.nstate, msg.piggyback_block, self.peers):
+        if msg.block == GiskardGenesisBlock():
+            parent_block = GiskardGenesisBlock()
+        else:
+            #if self._validator_connect[-1] == "0" and msg.block.block_num == 2:
+            #    import pdb;
+            #    pdb.set_trace()
+            parent_block = self.node.block_cache.block_store.get_parent_block(msg.block)
+        if parent_block is not None and Giskard.prepare_stage(self.nstate, parent_block, self.peers):
             #    """ first block to be proposed apart from the genesis block """
             LOGGER.info("parent in prepare stage")
-            if msg.piggyback_block not in self.node.block_cache.block_store.uncommitted_blocks:
-                self.node.block_cache.block_store.uncommitted_blocks.append(msg.piggyback_block)
-            #if msg.block.block_num == 4 \
+            #if msg.block.block_num == 5 \
             #        and self._validator_connect[-1] == "0":
             #    import pdb; pdb.set_trace()
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(

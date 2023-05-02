@@ -690,6 +690,15 @@ class Giskard:
                               GiskardGenesisBlock())
 
     @staticmethod
+    def adhoc_ParentBlock_msg(state: NState, parent_block):
+        return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
+                              state.node_view,
+                              state.node_id,
+                              parent_block,
+                              GiskardGenesisBlock())
+
+
+    @staticmethod
     def propose_block_init(state: NState, msg: GiskardMessage,
                            state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
         """ Returns True when a node transitioned to proposing blocks """
@@ -846,7 +855,11 @@ class Giskard:
         """CHANGE from the original specification
         PrepareBlockmsg is passed in, but we also need the quorum msg
         + pending_PrepareVote requires the msg to be in the counting msg buffer"""
-        quorum_msg = Giskard.get_quorum_msg_for_block(state, msg.piggyback_block, peers)
+        if msg.block == GiskardGenesisBlock():
+            parent_block = GiskardGenesisBlock()
+        else:
+            parent_block = block_cache.block_store.get_parent_block(msg.block)
+        quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
         lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
         return [state_prime, lm]

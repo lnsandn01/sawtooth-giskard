@@ -192,11 +192,12 @@ class _BlockCacheProxy:
         except UnknownBlock:
             return None
 
-    def remove_pending_block(self, block_id):
+    def remove_pending_block(self, block_id) -> bool:
         for b in self.pending_blocks:
             if b.block_id == block_id:
                 self.pending_blocks.remove(b)
-                return
+                return True
+        return False
 
 
 class _BlockStoreProxy:
@@ -295,7 +296,7 @@ class _BlockStoreProxy:
             if child_block.previous_id == block.block_id \
                     and child_block.block_num - 1 == block.block_num:
                 return GiskardBlock(block)
-            if block.block_num <= child_block.block_num:
+            if block.block_num < child_block.block_num:
                 return None
         return None
 
@@ -309,7 +310,7 @@ class _BlockStoreProxy:
             if parent_block.block_id == block.previous_id \
                     and parent_block.block_num + 1 == block.block_num:
                 return GiskardBlock(block)
-            if block.block_num <= parent_block.block_num:
+            if block.block_num < parent_block.block_num:
                 return None
         return None
 
