@@ -40,7 +40,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'processors': NodeController.intkey_config_registry,
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
-            'rounds': 1,
+            'rounds': 3,
             'start_nodes_per_round': 2,
             'stop_nodes_per_round': 0,
             'batches': 12,
@@ -99,11 +99,11 @@ class TestGiskardNetwork(unittest.TestCase):
         '''
         poet_kwargs = {} if poet_kwargs is None else poet_kwargs
         giskard_tester = None
+        giskard_tester = GiskardTester(start_nodes_per_round)
+        self.start_new_nodes(
+            processors, peering, schedulers,
+            start_nodes_per_round, 0, poet_kwargs)
         for round_ in range(rounds):
-            giskard_tester = GiskardTester(start_nodes_per_round)
-            self.start_new_nodes(
-                processors, peering, schedulers,
-                start_nodes_per_round, round_, poet_kwargs)
             LOGGER.info("\n\nstarted nodes\n\n")
             if round_ == 0:
                 self.send_populate_batch(time_between_batches)
@@ -113,15 +113,13 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nsent batches alternating\n\n")
             self.send_txns_all_at_once(batches, time_between_batches)
             LOGGER.info("\n\nsent batches\n\n")
-            while not giskard_tester.exited:
-                time.sleep(0.1)
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
-            self.stop_nodes(stop_nodes_per_round)
-            LOGGER.info("\n\nstopped nodes\n\n")
-            giskard_tester.exit = True
-            while not giskard_tester.exited:
-                time.sleep(0.1)
+        self.stop_nodes(stop_nodes_per_round)
+        LOGGER.info("\n\nstopped nodes\n\n")
+        giskard_tester.exit = True
+        while not giskard_tester.exited:
+            time.sleep(0.1)
 
         # Attempt to cleanly shutdown all processes
         for node_num in self.nodes:
@@ -259,7 +257,7 @@ class TestGiskardNetwork(unittest.TestCase):
 
 
 def make_txns():
-    jacksons = 'michael', 'tito', 'jackie', 'jermaine', 'marlon'
+    jacksons = 'michael', 'tito', 'jackie', 'jermaine', 'marlon', 'luise'
     populate = [('set', jackson, 10000) for jackson in jacksons]
     increment = [('inc', jackson, 1) for jackson in jacksons]
     return populate, increment

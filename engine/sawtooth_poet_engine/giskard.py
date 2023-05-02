@@ -554,7 +554,7 @@ class Giskard:
         # You don't always have 3 blocks at this point
         if len(block_cache.pending_blocks) < 3:
             messages = []
-            block_index = 0
+            block_index = block_cache.blocks_proposed_num
             while len(block_cache.pending_blocks) > 0 and block_index < 3:
                 block_index += 1
                 block = Giskard.generate_new_block(previous_msg.block, block_cache, block_index)
