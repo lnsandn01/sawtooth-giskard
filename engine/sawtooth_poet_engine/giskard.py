@@ -2,7 +2,6 @@ import copy
 import functools
 import itertools
 import time
-from collections import namedtuple
 from functools import reduce
 from typing import List
 
@@ -725,7 +724,7 @@ class Giskard:
             while block_cache.blocks_proposed_num <= LAST_BLOCK_INDEX_IDENTIFIER \
                     and len(block_cache.pending_blocks) > 0:
                 # if block_cache.pending_blocks[0] != GiskardGenesisBlock():
-                # block_cache.blocks_proposed += 1  # do not increase the counter when the first block was the genesis block
+                # block_cache.blocks_proposed_num += 1  # do not increase the counter when the first block was the genesis block
                 # TODO solve problem with only having one block at a time in pending_blocks
                 if block_cache.last_proposed_block is None:
                     previous_msg = Giskard.GenesisBlock_message(state)
@@ -1374,12 +1373,12 @@ class Giskard:
         transition_correct = True
         for node in peers:
             for process in giskard_state_transition_type.all_transition_types:
-                msg, block_cache, lm = Giskard.get_inputs_for_transition(process, gstate[node.node_id], peers,
+                msg, block_cache, lm = Giskard.get_inputs_for_transition(process, gstate.gstate[node], peers,
                                                                          old_version)
-                if not (Giskard.get_transition(process, gstate[node.node_id]) \
+                if not (Giskard.get_transition(process, gstate.gstate[node]) \
                         and gstate_prime == \
-                        Giskard.broadcast_messages(gstate, gstate.gstate[node.node_id],
-                                                   gstate_prime.gstate[node.node_id], lm)):
+                        Giskard.broadcast_messages(gstate, gstate.gstate[node],
+                                                   gstate_prime.gstate[node], lm)):
                     transition_correct = False
         if not transition_correct:
             return gstate_prime == \
@@ -1394,13 +1393,14 @@ class Giskard:
     # region global state trace
     @staticmethod
     def protocol_trace(gtrace: GTrace, nodes, old_version=False) -> bool:
-        for i in range(0, len(gtrace.gtrace) - 1):
+        import pdb; pdb.set_trace()
+        for i in range(0, len(gtrace.gtrace)+1):
             if i == 0:
-                if not gtrace[0] == GState(nodes):
+                if not gtrace.gtrace[0] == GState(nodes):
                     return False
             if i < len(gtrace.gtrace) - 1:
-                tmp_state = gtrace[i]
-                if not Giskard.GState_transition(tmp_state, gtrace[i + 1], nodes, old_version):
+                tmp_state = gtrace.gtrace[i]
+                if not Giskard.GState_transition(tmp_state, gtrace.gtrace[i + 1], nodes, old_version):
                     return False
         return True
 

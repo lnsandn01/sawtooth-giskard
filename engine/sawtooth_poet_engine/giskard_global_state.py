@@ -10,12 +10,18 @@ class GState(object):
     - a mapping from node identifier to its local state, and
     - a list of messages containing all broadcasted messages thus far. """
 
-    def __init__(self, nodes: List[GiskardNode] = [], gstate={}, broadcast_msgs: List[GiskardMessage] = []):
+    def __init__(self, nodes = [], gstate={}, broadcast_msgs: List[GiskardMessage] = []):
         """ The initial global state is defined as the collection of initial local
         states, paired with an empty message buffer. """
         self.gstate = gstate
         if not gstate:
-            self.gstate = {node.node_id: NState(node) for node in nodes}
+            if not nodes:
+                self.gstate = {}
+            else:
+                if isinstance(nodes[0], str):
+                    self.gstate = {node: NState(None, 0, node) for node in nodes}
+                else:
+                    self.gstate = {node.node_id: NState(node) for node in nodes}
         self.broadcast_msgs = broadcast_msgs
 
     def __eq__(self, other):

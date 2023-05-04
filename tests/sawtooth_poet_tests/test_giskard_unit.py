@@ -195,7 +195,7 @@ class TestGiskardUnit(unittest.TestCase):
         assert Giskard.highest_ViewChange_message(state).message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE
     # endregion
 
-    # region facts about local state transitions
+    # region state transitions
     def test_out_messages_local_monotonic(self, state1: NState = None, state2: NState = None,
                                           msg: GiskardMessage = None, lm: List[GiskardMessage] = None, t=None,
                                           node=None, block_cache=None, peers=None):
@@ -543,6 +543,17 @@ class TestGiskardUnit(unittest.TestCase):
             assert Giskard.prepare_stage(Giskard.process(state, msg), b, peers)
         else:
             assert False, "was not in prepare stage"
+
+    def test_global_state_transitions(self, peers=None, gtrace=None):
+        if gtrace is None:
+            gtrace = GTrace(peers)
+        else:
+            if peers is None:
+                peers = [tuple(list(gstate.gstate.keys())) for gstate in gtrace.gtrace]
+                peers = list(set([item for sublist in peers for item in sublist]))
+        if peers is None:
+            node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
+        assert Giskard.protocol_trace(gtrace, peers, False), "A state transition was incorrect"
     # endregion
 
     # region safety property tests

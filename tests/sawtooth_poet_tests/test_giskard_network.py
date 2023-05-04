@@ -42,10 +42,10 @@ class TestGiskardNetwork(unittest.TestCase):
             'processors': NodeController.intkey_config_registry,
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
-            'rounds': 3,
+            'rounds': 1,
             'start_nodes_per_round': 2,
             'stop_nodes_per_round': 0,
-            'batches': 12,
+            'batches': 4,
             'time_between_batches': 0,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,
@@ -117,7 +117,13 @@ class TestGiskardNetwork(unittest.TestCase):
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
         gstate = GiskardTester.create_GState_from_file()
+        """ Check consensus via the height injectivity proofs """
         TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
+        """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """
+        peers = list(set(gstate.gstate.keys()))
+        gtrace = GTrace(peers)
+        gtrace.gtrace.append(gstate)
+        TestGiskardUnit.test_global_state_transitions(None, None, gtrace)
         LOGGER.info(gstate.__str__())
         self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")

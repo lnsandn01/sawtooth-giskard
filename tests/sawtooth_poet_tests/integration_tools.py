@@ -242,7 +242,7 @@ class BlockCacheMock:
     def __init__(self, blocks):
         self.block_store = BlockStoreMock(blocks)
         self.pending_blocks = []
-        self.blocks_proposed = 0
+        self.blocks_proposed_num = 0
 
 
 class BlockStoreMock:
