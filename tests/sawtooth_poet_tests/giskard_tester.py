@@ -101,7 +101,9 @@ class GiskardTester:
             nstate: NState = jsonpickle.decode(nst,None,None,False,True,False,NState)
             if nstate.node_id not in nodes:
                 nodes.append(nstate.node_id)
-                gstate.gstate.update({nstate.node_id: nstate})
+                gstate.gstate.update({nstate.node_id: [nstate]})
+            else:
+                gstate.gstate[nstate.node_id].append(nstate)
         f.close()
         return gstate
 

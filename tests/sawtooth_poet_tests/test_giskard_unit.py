@@ -3,9 +3,9 @@ import logging
 from typing import List
 
 import sawtooth_poet_engine.giskard_state_transition_type as giskard_state_transition_type
-from giskard_global_trace import GTrace
-from giskard_node import GiskardNode
-from integration_tools import BlockCacheMock
+from sawtooth_poet_engine.giskard_global_trace import GTrace
+from sawtooth_poet_engine.giskard_node import GiskardNode
+from sawtooth_poet_tests.integration_tools import BlockCacheMock
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 from sawtooth_poet.journal.block_wrapper import NULL_BLOCK_IDENTIFIER, LAST_BLOCK_INDEX_IDENTIFIER
 from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenesisBlock
@@ -546,12 +546,18 @@ class TestGiskardUnit(unittest.TestCase):
     # endregion
 
     # region safety property tests
-    def test_all_stage_height_injectivity(self):
+    def test_all_stage_height_injectivity(self, peers=None, gtrace=None):
         """ Generates input for testing the safety properties """
-        node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
-        gtrace = GTrace(peers)
-        assert Giskard.prepare_stage_same_view_height_injective_statement([gtrace], peers)
-        assert Giskard.precommit_stage_height_injective_statement([gtrace], peers)
-        assert Giskard.commit_height_injective_statement([gtrace], peers)
+        if gtrace is None:
+            gtrace = GTrace(peers)
+        else:
+            if peers is None:
+                peers = [tuple(list(gstate.gstate.keys())) for gstate in gtrace.gtrace]
+                peers = list(set([item for sublist in peers for item in sublist]))
+        if peers is None:
+            node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
+        assert Giskard.prepare_stage_same_view_height_injective_statement([gtrace], peers), "prepare_stage_height_injectivity failed"
+        assert Giskard.precommit_stage_height_injective_statement([gtrace], peers), "precommit_stage_height_injectivity failed"
+        assert Giskard.commit_height_injective_statement([gtrace], peers), "commit_stage_height_injectivity failed"
 
     # endregion

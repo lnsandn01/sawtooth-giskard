@@ -334,10 +334,15 @@ class GiskardEngine(Engine):
             # TODO call all transitions with timeouts in mind
             if self.all_initial_blocks_proposed:
                 parent_block = self.node.block_cache.block_store.get_parent_block(block)
+                if parent_block is None:
+                    LOGGER.error("parent block of block_num: "+block.block_num+" is none in _handle_new_block, node: " +
+                                 self._validator_connect[-1])
+                LOGGER.info("\n\n\npending_blocks: "+self.node.block_cache.pending_blocks.__str__()+"\n\n\n")
                 lm = Giskard.make_PrepareBlocks(
                     self.nstate,
                     Giskard.adhoc_ParentBlock_msg(self.nstate, parent_block),
                     self.node.block_cache)
+                LOGGER.info("\n\n\npending_blocks: " + self.node.block_cache.pending_blocks.__str__() + "\n\n\n")
                 LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
                 self.node.block_cache.blocks_proposed_num += len(lm)
                 self.socket.send_pyobj(self.nstate)
@@ -438,10 +443,10 @@ class GiskardEngine(Engine):
         LOGGER.info("Handle PrepareBlock")
         if msg.block.block_num >= 3:
             self.all_initial_blocks_proposed = True
-        self.nstate = Giskard.add(self.nstate, msg)
         if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
             self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
         self.node.block_cache.remove_pending_block(msg.block.block_id)
+        self.nstate = Giskard.add(self.nstate, msg)
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
         if msg.block == GiskardGenesisBlock():
             parent_block = GiskardGenesisBlock()
@@ -467,6 +472,7 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_vote(self, msg):
         LOGGER.info("Handle PrepareVote")
+        self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
         # TODO replace with new get transition function
         if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, self.peers):
@@ -492,6 +498,7 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
+        self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
         if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:# \
                # or msg.block.block_index == 0:  # Last or genesis block

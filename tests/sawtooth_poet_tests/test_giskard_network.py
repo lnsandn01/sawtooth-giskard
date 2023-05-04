@@ -8,6 +8,8 @@ import shlex
 from tempfile import mkdtemp
 
 import sawtooth_sdk.protobuf.consensus_pb2 as consensus_pb2
+from sawtooth_poet_tests.test_giskard_unit import TestGiskardUnit
+from sawtooth_poet_engine.giskard_global_trace import GTrace
 from sawtooth_sdk.consensus.zmq_service import ZmqService
 from sawtooth_sdk.messaging.stream import Stream
 from sawtooth_poet_tests.integration_tools import SetSawtoothHome
@@ -108,13 +110,15 @@ class TestGiskardNetwork(unittest.TestCase):
             if round_ == 0:
                 self.send_populate_batch(time_between_batches)
                 LOGGER.info("\n\npopulated batches\n\n")
-                LOGGER.info(GiskardTester.create_GState_from_file().__str__())
             self.send_txns_alternating(batches, time_between_batches)
             LOGGER.info("\n\nsent batches alternating\n\n")
             self.send_txns_all_at_once(batches, time_between_batches)
             LOGGER.info("\n\nsent batches\n\n")
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
+        gstate = GiskardTester.create_GState_from_file()
+        TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
+        LOGGER.info(gstate.__str__())
         self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")
         giskard_tester.exit = True

@@ -1276,11 +1276,11 @@ class Giskard:
 
     @staticmethod
     def create_mock_block_cache_from_counting_msgs(state: NState, peers) -> BlockCacheMock:
-        blocks = [GiskardGenesisBlock()]
+        blocks = []
         for msg in state.counting_messages:
-            if not msg.block in blocks:
+            if msg.block not in blocks:
                 if Giskard.prepare_stage(state, msg.block, peers):
-                    blocks.__add__(msg.block)
+                    blocks.append(msg.block)
         return BlockCacheMock(blocks)
 
     @staticmethod
@@ -1442,24 +1442,24 @@ class Giskard:
         and both reach prepare stage for n and m's local state respectively in some view p,
         but are not equal, then we can prove a contradiction. """
         for gtrace in gtraces:
-            for i in range(0, len(gtrace.gtrace) - 1):  # iterating through the global states in the trace
-                gstate = gtrace[i].gstate
+            for i in range(0, len(gtrace.gtrace)):  # iterating through the global states in the trace
+                gstate = gtrace.gtrace[i].gstate
                 nodes = set(gstate.keys())
                 for node1, node2 in itertools.product(nodes, nodes):
                     if node1 == node2:
                         continue
-                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1],
+                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1][-1],
                                                                                  peers).block_store.blocks
-                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2],
+                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1],
                                                                                  peers).block_store.blocks
                     view = min(gstate[node1][0].node_view, gstate[node2][0].node_view)
-                    for v, block1, block2 in itertools.product(range(1, view), blocks1,
+                    for v, block1, block2 in itertools.product(range(0, view+1), blocks1,
                                                                blocks2):  # Todo check if views start with 0 or 1
                         if node1 in peers \
                                 and node2 in peers \
                                 and block1 != block2 \
-                                and Giskard.prepare_stage_in_view(gstate[node1][0], v, block1, peers) \
-                                and Giskard.prepare_stage_in_view(gstate[node2][0], v, block2, peers) \
+                                and Giskard.prepare_stage_in_view(gstate[node1][-1], v, block1, peers) \
+                                and Giskard.prepare_stage_in_view(gstate[node2][-1], v, block2, peers) \
                                 and block1.block_num == block2.block_num:  # blocks are different but same block height
                             return False  # TODO more printout info would be nice for testing
         return True
@@ -1533,11 +1533,11 @@ class Giskard:
         prepare stage, and its child block is in prepare stage, i.e., it has received
         quorum PrepareVote messages or a PrepareQC message in the current view or
         some previous view. """
-        child_block = node.block_cache.get_child_block(block)
+        child_block = node.block_cache.block_store.get_child_block(block)
         return child_block is not None \
-            and node.block_cache.get_parent_block(child_block) == block \
-            and Giskard.prepare_stage(gtrace[i].gstate[node.node_id], block, peers) \
-            and Giskard.prepare_stage(gtrace[i].gstate[node.node_id], child_block, peers)
+            and node.block_cache.block_store.get_parent_block(child_block) == block \
+            and Giskard.prepare_stage(gtrace.gtrace[i].gstate[node.node_id][-1], block, peers) \
+            and Giskard.prepare_stage(gtrace.gtrace[i].gstate[node.node_id][-1], child_block, peers)
 
     @staticmethod
     def precommit_stage_height_injective_statement(gtraces: List[GTrace], peers) -> bool:
@@ -1552,22 +1552,24 @@ class Giskard:
         the same height, and are both in precommit stage in n and m's local state respectively,
         but are not equal, then we can prove a contradiction. """
         for gtrace in gtraces:
-            for i in range(0, len(gtrace.gtrace) - 1):  # iterating through the global states in the trace
-                gstate = gtrace[i].gstate
+            for i in range(0, len(gtrace.gtrace) ):  # iterating through the global states in the trace
+                gstate = gtrace.gtrace[i].gstate
                 nodes = set(gstate.keys())
                 for node1, node2 in itertools.product(nodes, nodes):
                     if node1 == node2:
                         continue
-                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1],
-                                                                                 peers).block_store.blocks
-                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2],
-                                                                                 peers).block_store.blocks
+                    block_cache1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1][-1], peers)
+                    blocks1 = block_cache1.block_store.blocks
+                    block_cache2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1], peers)
+                    blocks2 = block_cache2.block_store.blocks
+                    full_node1 = GiskardNode(node1, gstate[node1][-1].node_view, False, block_cache1)
+                    full_node2 = GiskardNode(node2, gstate[node2][-1].node_view, False, block_cache2)
                     for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
                         if node1 in peers \
                                 and node2 in peers \
                                 and block1 != block2 \
-                                and Giskard.precommit_stage(gtrace, i, block1, peers) \
-                                and Giskard.precommit_stage(gtrace, i, block2, peers) \
+                                and Giskard.precommit_stage(gtrace, i, full_node1, block1, peers) \
+                                and Giskard.precommit_stage(gtrace, i, full_node2, block2, peers) \
                                 and block1.block_num == block2.block_num:  # blocks are different but same block height
                             return False  # TODO more printout info would be nice for testing
         return True
@@ -1581,9 +1583,9 @@ class Giskard:
 
         We say that a block is in commit stage in some local state iff it is in precommit stage
         and its child block is in precommit stage."""
-        child_block = node.block_cache.get_child_block(block)
+        child_block = node.block_cache.block_store.get_child_block(block)
         return child_block is not None \
-            and node.block_cache.get_parent_block(child_block) == block \
+            and node.block_cache.block_store.get_parent_block(child_block) == block \
             and Giskard.precommit_stage(gtrace, i, node, block, peers) \
             and Giskard.precommit_stage(gtrace, i, node, child_block, peers)
 
@@ -1600,22 +1602,24 @@ class Giskard:
         that are both at precommit stage for <<n>> and <<m>>'s local state, respectively,
         then we can prove a contradiction. """
         for gtrace in gtraces:
-            for i in range(0, len(gtrace.gtrace) - 1):  # iterating through the global states in the trace
-                gstate = gtrace[i].gstate
+            for i in range(0, len(gtrace.gtrace)):  # iterating through the global states in the trace
+                gstate = gtrace.gtrace[i].gstate
                 nodes = set(gstate.keys())
                 for node1, node2 in itertools.product(nodes, nodes):
                     if node1 == node2:
                         continue
-                    blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1],
-                                                                                 peers).block_store.blocks
-                    blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2],
-                                                                                 peers).block_store.blocks
+                    block_cache1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1][-1], peers)
+                    blocks1 = block_cache1.block_store.blocks
+                    block_cache2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1], peers)
+                    blocks2 = block_cache2.block_store.blocks
+                    full_node1 = GiskardNode(node1, gstate[node1][-1].node_view, False, block_cache1)
+                    full_node2 = GiskardNode(node2, gstate[node2][-1].node_view, False, block_cache2)
                     for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
                         if node1 in peers \
                                 and node2 in peers \
                                 and block1 != block2 \
-                                and Giskard.commit_stage(gtrace, i, block1, peers) \
-                                and Giskard.commit_stage(gtrace, i, block2, peers) \
+                                and Giskard.commit_stage(gtrace, i, full_node1, block1, peers) \
+                                and Giskard.commit_stage(gtrace, i, full_node2, block2, peers) \
                                 and block1.block_num == block2.block_num:  # blocks are different but same block height
                             return False  # TODO more printout info would be nice for testing
         return True
