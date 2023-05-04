@@ -13,6 +13,7 @@ from queue import Queue
 from threading import Thread
 
 from sawtooth_poet_engine.giskard_global_state import GState
+from sawtooth_poet_engine.giskard_global_trace import GTrace
 from sawtooth_poet_engine.giskard_nstate import NState
 from sawtooth_sdk.consensus.driver import Driver
 from sawtooth_sdk.consensus.engine import StartupState
@@ -45,8 +46,9 @@ class GiskardTester:
         f = open(self.file_name2, "w")
         f.write("")
         f.close()
-        self.gtrace_json = list()
+        self.nstates_json = list()
         self.nodes = []
+        self.gtrace = GTrace()
         t1 = threading.Thread(target=self.tester_loop, args=())
         t1.start()
 
@@ -72,12 +74,12 @@ class GiskardTester:
                     if nstate.node_id not in self.nodes:
                         self.nodes.append(nstate.node_id)
                     #print("\n\n\nTester Msg received ", nstate.node_id, "\n\n\n")
-                    self.gtrace_json.append(jsonpickle.encode(nstate, unpicklable=True))
+                    self.nstates_json.append(jsonpickle.encode(nstate, unpicklable=True))
                     f = open(self.file_name, "w")
-                    f.write(json.dumps(self.gtrace_json, indent=4))
+                    f.write(json.dumps(self.nstates_json, indent=4))
                     f.close()
                     f = open(self.file_name2, "w")
-                    f.write(json.dumps(self.gtrace_json, indent=4))
+                    f.write(json.dumps(self.nstates_json, indent=4))
                     f.close()
         # exit from loop, shutdown socket connections
         for sock in self.sockets:
@@ -89,7 +91,7 @@ class GiskardTester:
         return
 
     @staticmethod
-    def create_GState_from_file() -> GState:
+    def create_final_GState_from_file() -> GState:
         file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
         f = open(file_name)
         content = f.read()

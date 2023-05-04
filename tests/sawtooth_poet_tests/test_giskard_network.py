@@ -116,7 +116,7 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nsent batches\n\n")
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
-        gstate = GiskardTester.create_GState_from_file()
+        gstate = GiskardTester.create_final_GState_from_file()
         """ Check consensus via the height injectivity proofs """
         TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
         """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """

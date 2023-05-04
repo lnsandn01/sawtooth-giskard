@@ -1375,7 +1375,7 @@ class Giskard:
             for process in giskard_state_transition_type.all_transition_types:
                 msg, block_cache, lm = Giskard.get_inputs_for_transition(process, gstate.gstate[node], peers,
                                                                          old_version)
-                if not (Giskard.get_transition(process, gstate.gstate[node]) \
+                if not (Giskard.get_transition(process, msg, gstate.gstate[node]) \
                         and gstate_prime == \
                         Giskard.broadcast_messages(gstate, gstate.gstate[node],
                                                    gstate_prime.gstate[node], lm)):
