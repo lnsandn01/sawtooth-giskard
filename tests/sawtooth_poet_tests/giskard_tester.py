@@ -12,6 +12,7 @@ import jsonpickle
 from queue import Queue
 from threading import Thread
 
+from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_global_state import GState
 from sawtooth_poet_engine.giskard_global_trace import GTrace
 from sawtooth_poet_engine.giskard_nstate import NState
@@ -49,6 +50,7 @@ class GiskardTester:
         self.nstates_json = list()
         self.nodes = []
         self.gtrace = GTrace()
+        self.broadcast_msgs = []
         t1 = threading.Thread(target=self.tester_loop, args=())
         t1.start()
 
@@ -70,7 +72,8 @@ class GiskardTester:
             socks = dict(self.poller.poll(2000))
             for sock in self.sockets:
                 if sock in socks and socks[sock] == zmq.POLLIN:
-                    nstate: NState = sock.recv_pyobj(zmq.DONTWAIT)
+                    [nstate, lm] = sock.recv_pyobj(zmq.DONTWAIT)
+                    self.broadcast_msgs = self.broadcast_msgs + lm
                     if nstate.node_id not in self.nodes:
                         self.nodes.append(nstate.node_id)
                         gstate_dict = {}
@@ -79,16 +82,19 @@ class GiskardTester:
                                 gstate_dict.update({n: [nstate]})
                             else:
                                 gstate_dict.update({n: self.gtrace.gtrace[-1].gstate[n]})
-                        self.gtrace.gtrace.append(GState(self.nodes, gstate_dict))
+                        self.gtrace.gtrace.append(GState(self.nodes,
+                                                         gstate_dict,
+                                                         self.broadcast_msgs))
+                        self.gtrace.gtrace[-1].broadcast_msgs = self.broadcast_msgs
                     else:
                         latest_gstate = copy.deepcopy(self.gtrace.gtrace[-1])
                         if not latest_gstate:
-                            latest_gstate = GState(self.nodes)
+                            latest_gstate = GState(self.nodes, {}, self.broadcast_msgs)
                         latest_gstate.gstate[nstate.node_id].append(nstate)
-                        new_gstate = latest_gstate
-                        self.gtrace.gtrace.append(new_gstate)
+                        latest_gstate.broadcast_msgs = self.broadcast_msgs
+                        self.gtrace.gtrace.append(latest_gstate)
                     #print("\n\n\nTester Msg received ", nstate.node_id, "\n\n\n")
-                    self.nstates_json.append(jsonpickle.encode(nstate, unpicklable=True))
+                    self.nstates_json.append(jsonpickle.encode([nstate, self.broadcast_msgs], unpicklable=True))
                     f = open(self.file_name, "w")
                     f.write(json.dumps(self.nstates_json, indent=4))
                     f.close()
@@ -112,15 +118,17 @@ class GiskardTester:
         #print(content)
         nstates = jsonpickle.decode(content)
         nodes = []
+        broadcast_msgs = []
         gstate = GState()
         for nst in nstates:
-            nstate: NState = jsonpickle.decode(nst,None,None,False,True,False,NState)
+            nstate, broadcast_msgs = jsonpickle.decode(nst, None, None, False, True, False, [NState, List[GiskardMessage]])
             if nstate.node_id not in nodes:
                 nodes.append(nstate.node_id)
                 gstate.gstate.update({nstate.node_id: [nstate]})
             else:
                 gstate.gstate[nstate.node_id].append(nstate)
         f.close()
+        gstate.broadcast_msgs = broadcast_msgs
         return gstate
 
     def _process(self, message):
