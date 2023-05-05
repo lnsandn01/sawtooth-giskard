@@ -73,6 +73,20 @@ class GiskardTester:
                     nstate: NState = sock.recv_pyobj(zmq.DONTWAIT)
                     if nstate.node_id not in self.nodes:
                         self.nodes.append(nstate.node_id)
+                        gstate_dict = {}
+                        for n in self.nodes:
+                            if n == nstate.node_id:
+                                gstate_dict.update({n: [nstate]})
+                            else:
+                                gstate_dict.update({n: self.gtrace.gtrace[-1].gstate[n]})
+                        self.gtrace.gtrace.append(GState(self.nodes, gstate_dict))
+                    else:
+                        latest_gstate = copy.deepcopy(self.gtrace.gtrace[-1])
+                        if not latest_gstate:
+                            latest_gstate = GState(self.nodes)
+                        latest_gstate.gstate[nstate.node_id].append(nstate)
+                        new_gstate = latest_gstate
+                        self.gtrace.gtrace.append(new_gstate)
                     #print("\n\n\nTester Msg received ", nstate.node_id, "\n\n\n")
                     self.nstates_json.append(jsonpickle.encode(nstate, unpicklable=True))
                     f = open(self.file_name, "w")

@@ -219,7 +219,6 @@ class GiskardEngine(Engine):
         _batch_publisher = _BatchPublisherProxy(stream, signer)
         self.node = GiskardNode(validator_id, 0, self.dishonest, block_cache)
         self.nstate = NState(self.node)
-        self.socket.send_pyobj(self.nstate)
         self.new_network = self._get_chain_head() == GiskardGenesisBlock()
         if self._get_chain_head().block_num > 3:
             self.all_initial_blocks_proposed = True
@@ -257,11 +256,12 @@ class GiskardEngine(Engine):
                     if not self.genesis_proposed:
                         self.node.block_cache.pending_blocks.append(copy.deepcopy(self._get_chain_head()))
                         self.genesis_proposed = True
+                        self.socket.send_pyobj(self.nstate)
                     if len(self.node.block_cache.pending_blocks) > 0:
                         self.nstate, lm = Giskard.propose_block_init_set(
                             self.nstate, None, self.node.block_cache)
                         LOGGER.info("propose new block from while check: count msgs: " + str(len(lm)))
-                        self.socket.send_pyobj(self.nstate)
+                        #self.socket.send_pyobj(self.nstate)
                         self._send_out_msgs(lm)
 
                         for msg in lm:
@@ -270,6 +270,7 @@ class GiskardEngine(Engine):
                             self._handle_prepare_block(msg)
                         if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER+1:
                             self.all_initial_blocks_proposed = True
+                            self.socket.send_pyobj(self.nstate)
                             LOGGER.info("all initial blocks proposed")
             try:
                 try:
@@ -345,7 +346,7 @@ class GiskardEngine(Engine):
                 LOGGER.info("\n\n\npending_blocks: " + self.node.block_cache.pending_blocks.__str__() + "\n\n\n")
                 LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
                 self.node.block_cache.blocks_proposed_num += len(lm)
-                self.socket.send_pyobj(self.nstate)
+                #self.socket.send_pyobj(self.nstate)
                 self._send_out_msgs(lm)
                 for msg in lm:
                     self._handle_prepare_block(msg)
@@ -447,6 +448,7 @@ class GiskardEngine(Engine):
             self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
         if msg.block == GiskardGenesisBlock():
             parent_block = GiskardGenesisBlock()
@@ -466,7 +468,6 @@ class GiskardEngine(Engine):
         else:
             LOGGER.info("parent not in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
-
         self.socket.send_pyobj(self.nstate)
         self._send_out_msgs(lm)
 
@@ -474,6 +475,7 @@ class GiskardEngine(Engine):
         LOGGER.info("Handle PrepareVote")
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
         # TODO replace with new get transition function
         if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, self.peers):
             LOGGER.info("prepvote in prep stage")
@@ -495,11 +497,13 @@ class GiskardEngine(Engine):
     def _handle_view_change(self, msg):
         LOGGER.info("Handle ViewChange")
         self.nstate = Giskard.add(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
 
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
         if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:# \
                # or msg.block.block_index == 0:  # Last or genesis block
             self.prepareQC_last_view = msg
@@ -527,6 +531,7 @@ class GiskardEngine(Engine):
     def _handle_view_change_qc(self, msg):
         LOGGER.info("Handle ViewChangeQC")
         self.nstate = Giskard.add(self.nstate, msg)
+        self.socket.send_pyobj(self.nstate)
         self.nstate, lm = Giskard.process_ViewChangeQC_single_set(self.nstate, msg)
         self.socket.send_pyobj(self.nstate)
 

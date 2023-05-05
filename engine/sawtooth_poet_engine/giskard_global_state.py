@@ -18,10 +18,11 @@ class GState(object):
             if not nodes:
                 self.gstate = {}
             else:
-                if isinstance(nodes[0], str):
-                    self.gstate = {node: NState(None, 0, node) for node in nodes}
-                else:
-                    self.gstate = {node.node_id: NState(node) for node in nodes}
+                if len(nodes) > 0:
+                    if isinstance(nodes[0], str):
+                        self.gstate = {node: [NState(None, 0, node)] for node in nodes}
+                    else:
+                        self.gstate = {node.node_id: [NState(node)] for node in nodes}
         self.broadcast_msgs = broadcast_msgs
 
     def __eq__(self, other):

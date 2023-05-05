@@ -553,7 +553,7 @@ class TestGiskardUnit(unittest.TestCase):
                 peers = list(set([item for sublist in peers for item in sublist]))
         if peers is None:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
-        assert Giskard.protocol_trace(gtrace, peers, False), "A state transition was incorrect"
+        assert Giskard.protocol_trace(gtrace, False), "A state transition was incorrect"
     # endregion
 
     # region safety property tests

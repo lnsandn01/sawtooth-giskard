@@ -120,10 +120,10 @@ class TestGiskardNetwork(unittest.TestCase):
         """ Check consensus via the height injectivity proofs """
         TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
         """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """
-        peers = list(set(gstate.gstate.keys()))
-        gtrace = GTrace(peers)
-        gtrace.gtrace.append(gstate)
-        TestGiskardUnit.test_global_state_transitions(None, None, gtrace)
+        #peers = list(set(gstate.gstate.keys()))
+        #gtrace = GTrace(peers)
+        #gtrace.gtrace.append(gstate)
+        TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
         LOGGER.info(gstate.__str__())
         self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")
