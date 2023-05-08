@@ -243,6 +243,8 @@ class BlockCacheMock:
         self.block_store = BlockStoreMock(blocks)
         self.pending_blocks = []
         self.blocks_proposed_num = 0
+        self.last_proposed_block = None
+        self.blocks_reached_qc_current_view = []
 
 
 class BlockStoreMock:

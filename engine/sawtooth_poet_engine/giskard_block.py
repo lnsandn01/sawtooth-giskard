@@ -77,5 +77,4 @@ class GiskardGenesisBlock(GiskardBlock):
             return self.block_num == other.block_num
 
         return self.block_num == other.block_num \
-            and self.previous_id == other.previous_id \
-            and self.block_index == other.block_index
+            and self.previous_id == other.previous_id

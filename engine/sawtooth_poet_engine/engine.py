@@ -84,6 +84,7 @@ class GiskardEngine(Engine):
         # original NState from the formal specification
         self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
         self.prepareQC_last_view = None
+        self.hanging_prepareQC_new_proposer = False
         # connection to GiskardTester, to send state updates
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()
@@ -329,27 +330,32 @@ class GiskardEngine(Engine):
         # Giskard -------------
         # TODO check if this block was already proposed
         self.node.block_cache.pending_blocks.append(block)
-        return
-        if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers) \
-                and self.node.block_cache.blocks_proposed_num < LAST_BLOCK_INDEX_IDENTIFIER:
+        #if block.block_num == 5:
+            #import pdb; pdb.set_trace()
+        if self.hanging_prepareQC_new_proposer \
+                and len(self.node.block_cache.pending_blocks) >= 3:
             # TODO call all transitions with timeouts in mind
-            if self.all_initial_blocks_proposed:
-                parent_block = self.node.block_cache.block_store.get_parent_block(block)
-                if parent_block is None:
-                    LOGGER.error("parent block of block_num: "+block.block_num+" is none in _handle_new_block, node: " +
-                                 self._validator_connect[-1])
-                LOGGER.info("\n\n\npending_blocks: "+self.node.block_cache.pending_blocks.__str__()+"\n\n\n")
-                lm = Giskard.make_PrepareBlocks(
-                    self.nstate,
-                    Giskard.adhoc_ParentBlock_msg(self.nstate, parent_block),
-                    self.node.block_cache)
-                LOGGER.info("\n\n\npending_blocks: " + self.node.block_cache.pending_blocks.__str__() + "\n\n\n")
-                LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
-                self.node.block_cache.blocks_proposed_num += len(lm)
-                #self.socket.send_pyobj([self.nstate, lm])
-                self._send_out_msgs(lm)
-                for msg in lm:
-                    self._handle_prepare_block(msg)
+            self.hanging_prepareQC_new_proposer = False
+            parent_block = self.prepareQC_last_view.block
+            if parent_block is None:
+                LOGGER.error("parent block of block_num: "+block.block_num+" is none in _handle_new_block, node: " +
+                             self._validator_connect[-1])
+            #LOGGER.info("\n\n\npending_blocks: "+self.node.block_cache.pending_blocks.__str__()+"\n\n\n")
+            #lm = Giskard.make_PrepareBlocks(
+            #    self.nstate,
+            #    Giskard.adhoc_ParentBlock_msg(self.nstate, parent_block),
+            #    self.node.block_cache)
+            self.nstate, lm = \
+                Giskard.process_PrepareQC_last_block_new_proposer_set(
+                    self.nstate, self.nstate.in_messages[0], self.node.block_cache)
+            self.node.block_cache.blocks_proposed_num += len(lm)
+            #LOGGER.info("\n\n\npending_blocks: " + self.node.block_cache.pending_blocks.__str__() + "\n\n\n")
+            LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
+            self.node.block_cache.blocks_proposed_num += len(lm)
+            self.socket.send_pyobj([self.nstate, lm])
+            self._send_out_msgs(lm)
+            for msg in lm:
+                self._handle_prepare_block(msg)
         # Giskard End ---------
 
     def _handle_valid_block(self, block_id):
@@ -491,6 +497,10 @@ class GiskardEngine(Engine):
                 LOGGER.info("no vote quorum")
             self.nstate, lm = Giskard.process_PrepareVote_wait_set(
                 self.nstate, msg, self.node.block_cache)
+        #for m in lm:
+            #if m.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+                #if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
+                #    self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
         self.socket.send_pyobj([self.nstate, lm])
         self._send_out_msgs(lm)
 
@@ -504,20 +514,31 @@ class GiskardEngine(Engine):
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
         self.socket.send_pyobj([self.nstate, []])
-        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:# \
-               # or msg.block.block_index == 0:  # Last or genesis block
+        if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
+            self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
+        else:
+            return
+        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
             self.prepareQC_last_view = msg
+        if len(self.node.block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER:# \
+            self.node.block_cache.blocks_reached_qc_current_view = []
+               # or msg.block.block_index == 0:  # Last or genesis block
             if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("last block new proposer node: " + self._validator_connect[-1])
                 self.node.block_cache.blocks_proposed_num = 0  # resest proposed blocks count
-                self.nstate, lm = \
-                    Giskard.process_PrepareQC_last_block_new_proposer_set(
-                        self.nstate, msg, self.node.block_cache)  # TODO prolong sending state update until all 3 blocks sent?
-                self.node.block_cache.blocks_proposed_num += len(lm)  # for the case less than 3 blocks were proposed
+                if len(self.node.block_cache.pending_blocks) >= 3:
+                    self.nstate, lm = \
+                        Giskard.process_PrepareQC_last_block_new_proposer_set(
+                            self.nstate, msg, self.node.block_cache)  # TODO prolong sending state update until all 3 blocks sent?
+                    self.node.block_cache.blocks_proposed_num += len(lm)  # for the case less than 3 blocks were proposed
+                else:
+                    self.hanging_prepareQC_new_proposer = True
+                    return
             else:
                 LOGGER.info("last block no new proposer node: " + self._validator_connect[-1])
                 self.nstate, lm = \
                     Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
+                LOGGER.info("not the new proposer: " + self._validator_connect[-1] + " got view: " + str(self.nstate.node_view))
         else:
             LOGGER.info("non-last block")
             self.nstate, lm = Giskard.process_PrepareQC_non_last_block_set(
@@ -537,7 +558,7 @@ class GiskardEngine(Engine):
 
     def _send_out_msgs(self, lm):
         LOGGER.info("send message: " + str(len(lm)))
-        for msg in lm:
+        for msg in lm:  # TODO messages can be received out of order
             LOGGER.info(
                 "node: " + self._validator_connect[-1] + " broadcasting: " + str(msg.message_type) + " block: " + str(
                     msg.block.block_num))

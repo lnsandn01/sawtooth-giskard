@@ -175,7 +175,7 @@ class _BlockCacheProxy:
         self.pending_blocks = []
         self.blocks_proposed_num = 0
         self.last_proposed_block = None
-
+        self.blocks_reached_qc_current_view = []
 
     def __eq__(self, other):
         if not isinstance(other, _BlockCacheProxy):
