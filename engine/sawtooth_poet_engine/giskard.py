@@ -5,6 +5,8 @@ import traceback
 from functools import reduce
 from typing import List
 
+import jsonpickle
+
 from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenesisBlock
 from sawtooth_poet_engine.giskard_message import GiskardMessage
 from sawtooth_poet_engine.giskard_nstate import NState
@@ -344,6 +346,15 @@ class Giskard:
                 return True
         return False
 
+    @staticmethod
+    def prepare_qc_already_sent(state: NState, b: GiskardBlock) -> bool:
+        msg: GiskardMessage
+        for msg in state.out_messages:
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC \
+                    and msg.block == b:
+                return True
+        return False
+
     # endregion
 
     # region prepare stage definitions
@@ -366,6 +377,8 @@ class Giskard:
     @staticmethod
     def vote_quorum_in_view(state: NState, view: int, b: GiskardBlock, peers) -> bool:
         """ Returns True if there is a vote quorum in the given view, for the given block """
+        if b == GiskardGenesisBlock() and view == 0:  # TODO check genesis block behaviour and make it consistent
+            return True
         return Giskard.quorum(Giskard.processed_PrepareVote_in_view_about_block(state, view, b), peers)
 
     @staticmethod
@@ -654,7 +667,7 @@ class Giskard:
                               state.node_view,  # view number
                               state.node_id,
                               msg.block,
-                              GiskardGenesisBlock())
+                              GiskardGenesisBlock())  # TODO need block from last view here
 
     @staticmethod
     def make_ViewChange(state: NState, peers) -> GiskardMessage:
@@ -665,7 +678,7 @@ class Giskard:
                               state.node_view,
                               state.node_id,
                               Giskard.highest_prepare_block_in_view(state, state.node_view, peers),
-                              GiskardGenesisBlock())
+                              GiskardGenesisBlock())  # TODO need block from last view here
 
     @staticmethod
     def make_ViewChangeQC(state: NState, highest_msg: GiskardMessage) -> GiskardMessage:
@@ -677,7 +690,7 @@ class Giskard:
                               state.node_view,
                               state.node_id,
                               highest_msg.block,
-                              GiskardGenesisBlock())
+                              GiskardGenesisBlock())  # TODO need block from last view here
 
     # endregion
 
@@ -890,7 +903,7 @@ class Giskard:
 
     @staticmethod
     def process_PrepareVote_wait(state: NState, msg: GiskardMessage,
-                                 state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
+                                 state_prime: NState, lm: List[GiskardMessage], node, peers) -> bool:
         """ Block has not reached prepare stage - wait to send PrepareVote messages for child """
         return state_prime == Giskard.process(state, msg) \
             and lm == [] \
@@ -899,11 +912,10 @@ class Giskard:
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and Giskard.view_valid(state, msg) \
             and not state.timeout \
-            and not Giskard.prepare_stage(Giskard.process(state, msg), msg.block, block_cache)
+            and not Giskard.prepare_stage(Giskard.process(state, msg), msg.block, peers)
 
     @staticmethod
-    def process_PrepareVote_wait_set(state: NState, msg: GiskardMessage,
-                                     block_cache) -> [NState, List[GiskardMessage]]:
+    def process_PrepareVote_wait_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
         state_prime = Giskard.process(state, msg)
         return [state_prime, []]
 
@@ -913,7 +925,10 @@ class Giskard:
         """ Block is about to reach QC - send PrepareVote messages for child block if it exists and send PrepareQC
         vote_quorum means quorum PrepareVote messages """
         # TODO is checking in the out_messages enough with exists_same_height_block ?
-        lm_prime = [Giskard.make_PrepareQC(state, msg)] + Giskard.pending_PrepareVote(state, msg, block_cache)
+        lm_prime = []
+        if not Giskard.prepare_qc_already_sent(state, msg.block):
+            lm_prime.append(Giskard.make_PrepareQC(state, msg))
+        lm_prime = lm_prime + Giskard.pending_PrepareVote(state, msg, block_cache)
         return state_prime == \
             Giskard.process(Giskard.record_plural(
                 state, lm_prime),
@@ -929,7 +944,10 @@ class Giskard:
 
     @staticmethod
     def process_PrepareVote_vote_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
-        lm = [Giskard.make_PrepareQC(state, msg)] + Giskard.pending_PrepareVote(state, msg, block_cache)
+        lm = []
+        if not Giskard.prepare_qc_already_sent(state, msg.block):
+            lm.append(Giskard.make_PrepareQC(state, msg))
+        lm = lm + Giskard.pending_PrepareVote(state, msg, block_cache)
         state_prime = Giskard.process(Giskard.record_plural(
             state, lm), msg)
         return [state_prime, lm]
@@ -954,9 +972,18 @@ class Giskard:
         """ Increment the view, propose next block """
         """ CHANGE from the original specification
         removed and Giskard.last_block(msg.block) 
-        as the last prepareqc message i can receive can be for a previous block"""
+        as the last prepareqc message i can receive can be for a previous block
+        + here we also need a quorum msg, 
+        as the last received prepareQC doesn't need to be the one of the highest block"""
+        quorum_block = None
+        for block in block_cache.blocks_reached_qc_current_view:
+            if block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
+                quorum_block = block
+        quorum_msg = Giskard.get_quorum_msg_for_block(state, quorum_block, peers)
         lm_prime = Giskard.make_PrepareBlocks(
-            Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)
+            Giskard.increment_view(Giskard.process(state, msg)),
+            quorum_msg,
+            block_cache)
         return state_prime == \
             Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
                                   lm_prime) \
@@ -970,8 +997,13 @@ class Giskard:
 
     @staticmethod
     def process_PrepareQC_last_block_new_proposer_set(state: NState, msg: GiskardMessage,
-                                                      block_cache) -> [NState, List[GiskardMessage]]:
-        lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, block_cache)
+                                                      block_cache, peers) -> [NState, List[GiskardMessage]]:
+        quorum_block = None
+        for block in block_cache.blocks_reached_qc_current_view:
+            if block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
+                quorum_block = block
+        quorum_msg = Giskard.get_quorum_msg_for_block(state, quorum_block, peers)
+        lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), quorum_msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.increment_view(Giskard.process(state, msg)),
                                             lm)
         return [state_prime, lm]
@@ -1289,22 +1321,13 @@ class Giskard:
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
             return Giskard.process_PrepareVote_vote(state, msg, state_prime, lm, node, block_cache, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
-            return Giskard.process_PrepareVote_wait(state, msg, state_prime, lm, node, block_cache)
+            return Giskard.process_PrepareVote_wait(state, msg, state_prime, lm, node, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
-            if len(block_cache.blocks_reached_qc_current_view) >= 2:
-                import pdb;
-                pdb.set_trace()
             return Giskard.process_PrepareQC_last_block_new_proposer(state, msg, state_prime, lm, node, block_cache,
                                                                      peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
-            if len(block_cache.blocks_reached_qc_current_view) >= 2:
-                import pdb;
-                pdb.set_trace()
             return Giskard.process_PrepareQC_last_block(state, msg, state_prime, lm, node, block_cache, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
-            if len(block_cache.blocks_reached_qc_current_view) >= 2:
-                import pdb;
-                pdb.set_trace()
             return Giskard.process_PrepareQC_non_last_block(state, msg, state_prime, lm, node, block_cache)
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
             return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache,
@@ -1374,20 +1397,21 @@ class Giskard:
                 lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, tmp_block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
             msg = state.in_messages[-1]
-            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state,msg), state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
-            lm = [Giskard.make_PrepareQC(state, msg)] + Giskard.pending_PrepareVote(state, msg, tmp_block_cache)
+            lm = []
+            if not Giskard.prepare_qc_already_sent(state, msg.block):
+                lm.append(Giskard.make_PrepareQC(state, msg))
+            lm = lm + Giskard.pending_PrepareVote(state, msg, tmp_block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
             msg = state.in_messages[-1]
-            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state,msg), state_prime, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
             msg = state.in_messages[-1]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
             lm = Giskard.make_PrepareBlocks(Giskard.increment_view(Giskard.process(state, msg)), msg, tmp_block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_TYPE:
-            """import pdb;
-            pdb.set_trace()"""
             msg = state.in_messages[-1]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_NON_LAST_BLOCK_TYPE:
@@ -1451,26 +1475,22 @@ class Giskard:
         full_node = GiskardNode(node, gstate.gstate[node][-1].node_view, False, None)
         transition_correct = False
         for process in giskard_state_transition_type.all_transition_types:
-            """ the in_message buffer is not allowed to be empty for any other transition """
-            if process != giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE \
-                    and not gstate.gstate[node][-1].in_messages:
-                continue
+            """ the in_message buffer is not allowed to be empty for any transition other than the initial block proposal"""
+            if len(gstate.gstate[node][-1].in_messages) == 0 \
+                and not Giskard.is_block_proposer(full_node, full_node.node_view, nodes):
+                return True
             if process == giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE \
                     and len(gstate.gstate[node][-1].out_messages) > 0:
                 if len(gstate.gstate[node][-1].in_messages) != 0:  # we only check this transition once
                     continue
                 return True  # this is the transition right after the initial proposition of blocks
-            msg, block_cache, lm = Giskard.get_inputs_for_transition(process,gstate.gstate[node][-1],gstate_prime.gstate[node][-1], nodes,old_version)
+            msg, block_cache, lm = Giskard.get_inputs_for_transition(
+                process,
+                gstate.gstate[node][-1],
+                gstate_prime.gstate[node][-1],
+                nodes,
+                old_version)
             full_node.block_cache = block_cache
-            """counter = []
-            for pqcmsg in gstate.gstate[node][-1].out_messages + gstate.gstate[node][-1].in_messages:
-                if pqcmsg.message_type == 1003:
-                    if pqcmsg.block not in counter:
-                        counter.append(msg.block)
-            if len(counter) == 3 and process == 9:
-                    import pdb; pdb.set_trace()
-            if gstate_prime.gstate[node][-1].node_view > 0:
-                import pdb; pdb.set_trace()"""
             found_transition = Giskard.get_transition(process,
                                                       gstate.gstate[node][-1],
                                                       msg,
@@ -1494,6 +1514,16 @@ class Giskard:
 
             if found_transition and equal:
                 transition_correct = True  # CHANGE FROM THE ORIGINAL SPECIFICATION there whole gstates are compared
+                file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
+                f = open(file_name)
+                content = f.read()
+                nr = jsonpickle.decode(content)
+                f.close()
+                nr = int(nr)
+                nr += 1
+                f = open(file_name, "w")
+                f.write(str(nr))
+                f.close()
                 break
         if not transition_correct:
             import pdb; pdb.set_trace()
@@ -1510,18 +1540,19 @@ class Giskard:
     # region global state trace
     @staticmethod
     def protocol_trace(gtrace: GTrace, old_version=False) -> bool:
-        for i in range(0, len(gtrace.gtrace)):
-            nodes = list(set(gtrace.gtrace[i].gstate.keys()))
-            # if i == 0:
-            #    if not gtrace.gtrace[0] == GState(nodes):
-            #        return False
-            if i < len(gtrace.gtrace) - 1:
-                for node in nodes:
+        nodes = list(set(gtrace.gtrace[-1].gstate.keys()))
+        nodes.sort(key=lambda h: int(h, 16))
+        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
+        f = open(file_name, "w")
+        f.write(str(0))
+        f.close()
+        for node in nodes:
+            for i in range(0, len(gtrace.gtrace)):
+                if i < len(gtrace.gtrace) - 1:
                     tmp_gstate = gtrace.gtrace[i]
                     next_gstate = Giskard.get_nodes_next_state(gtrace, i, node)
                     if not next_gstate:  # this node has no further transition
                         continue
-
                     if not Giskard.GState_transition(tmp_gstate, next_gstate, node, nodes, old_version):
                         return False
         return True
@@ -1529,7 +1560,7 @@ class Giskard:
     @staticmethod
     def get_nodes_next_state(gtrace: GTrace, i: int, node: str):
         tmp_gstate = gtrace.gtrace[i]
-        for j in range(i + 1, len(gtrace.gtrace)):
+        for j in range(i, len(gtrace.gtrace)):
             if gtrace.gtrace[j].gstate[node][-1] != tmp_gstate.gstate[node][-1]:
                 return gtrace.gtrace[j]
         return None

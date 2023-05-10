@@ -49,6 +49,7 @@ class GiskardTester:
         f.close()
         self.nstates_json = list()
         self.nodes = []
+        self.init_gstate = GState()
         self.gtrace = GTrace()
         self.broadcast_msgs = []
         t1 = threading.Thread(target=self.tester_loop, args=())
@@ -76,16 +77,11 @@ class GiskardTester:
                     self.broadcast_msgs = self.broadcast_msgs + lm
                     if nstate.node_id not in self.nodes:
                         self.nodes.append(nstate.node_id)
-                        gstate_dict = {}
-                        for n in self.nodes:
-                            if n == nstate.node_id:
-                                gstate_dict.update({n: [nstate]})
-                            else:
-                                gstate_dict.update({n: self.gtrace.gtrace[-1].gstate[n]})
-                        self.gtrace.gtrace.append(GState(self.nodes,
-                                                         gstate_dict,
-                                                         self.broadcast_msgs))
-                        self.gtrace.gtrace[-1].broadcast_msgs = self.broadcast_msgs
+                        self.init_gstate.gstate.update({nstate.node_id: [nstate]})
+                        self.init_gstate.broadcast_msgs = self.init_gstate.broadcast_msgs + lm
+                        if len(self.nodes) == 2:
+                            self.gtrace.gtrace[0] = self.init_gstate
+                            self.gtrace.gtrace[-1].broadcast_msgs = self.broadcast_msgs
                     else:
                         latest_gstate = copy.deepcopy(self.gtrace.gtrace[-1])
                         if not latest_gstate:
@@ -115,7 +111,6 @@ class GiskardTester:
         file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
         f = open(file_name)
         content = f.read()
-        #print(content)
         nstates = jsonpickle.decode(content)
         nodes = []
         broadcast_msgs = []

@@ -42,10 +42,10 @@ class TestGiskardNetwork(unittest.TestCase):
             'processors': NodeController.intkey_config_registry,
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
-            'rounds': 2,
+            'rounds': 3,
             'start_nodes_per_round': 2,
             'stop_nodes_per_round': 0,
-            'batches': 8,
+            'batches': 12,
             'time_between_batches': 0,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,
@@ -105,8 +105,8 @@ class TestGiskardNetwork(unittest.TestCase):
         self.start_new_nodes(
             processors, peering, schedulers,
             start_nodes_per_round, 0, poet_kwargs)
+        LOGGER.info("\n\nstarted nodes\n\n")
         for round_ in range(rounds):
-            LOGGER.info("\n\nstarted nodes\n\n")
             if round_ == 0:
                 self.send_populate_batch(time_between_batches)
                 LOGGER.info("\n\npopulated batches\n\n")
@@ -124,7 +124,6 @@ class TestGiskardNetwork(unittest.TestCase):
         #gtrace = GTrace(peers)
         #gtrace.gtrace.append(gstate)
         TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
-        LOGGER.info(gstate.__str__())
         self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")
         giskard_tester.exit = True

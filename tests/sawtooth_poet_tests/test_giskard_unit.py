@@ -551,8 +551,10 @@ class TestGiskardUnit(unittest.TestCase):
             if peers is None:
                 peers = [tuple(list(gstate.gstate.keys())) for gstate in gtrace.gtrace]
                 peers = list(set([item for sublist in peers for item in sublist]))
+                peers.sort(key=lambda h: int(h, 16))
         if peers is None:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
+            peers.sort()
         assert Giskard.protocol_trace(gtrace, False), "A state transition was incorrect"
     # endregion
 
@@ -565,8 +567,10 @@ class TestGiskardUnit(unittest.TestCase):
             if peers is None:
                 peers = [tuple(list(gstate.gstate.keys())) for gstate in gtrace.gtrace]
                 peers = list(set([item for sublist in peers for item in sublist]))
+                peers.sort(key=lambda h: int(h, 16))
         if peers is None:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
+            peers.sort()
         assert Giskard.prepare_stage_same_view_height_injective_statement([gtrace], peers), "prepare_stage_height_injectivity failed"
         assert Giskard.precommit_stage_height_injective_statement([gtrace], peers), "precommit_stage_height_injectivity failed"
         assert Giskard.commit_height_injective_statement([gtrace], peers), "commit_stage_height_injectivity failed"
