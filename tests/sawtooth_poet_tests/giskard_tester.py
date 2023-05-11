@@ -27,34 +27,44 @@ from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 
 class GiskardTester:
-    def __init__(self, num_endpoints, k_peers):
+    def __init__(self, num_endpoints):
+        """ Connect to each engine in the net for recording their nstates """
         print("init tester")
-        """ Create Streams for each engine in the net for exchanging nstates with each other """
-        self.exit = False
+        self.exit = False  #  set to True from the outside to stop the GiskardTester
         self.exited = False
-        self.num_endpoints = num_endpoints
-        self.k_peers = k_peers
+        self.num_endpoints = num_endpoints  # the number of participating nodes
         self.sockets = []
         self.context = zmq.Context()
         self.poller = zmq.Poller()
         for i in range(0, num_endpoints):
             self.poller, self.sockets = GiskardTester.create_socket(i, self.context, self.poller, self.sockets)
         print("tester bound sockets")
-        self.file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_" + str(int(time.time())) + ".json"
-        f = open(self.file_name, "w")
-        f.write("")
-        f.close()
+        self.nstates_json = list()  # this will be printed out, so we can later recreate/test the transitions
+        self.nodes = []  # the node_id's of the participating nodes
+        self.init_gstate = GState()  # the initial GState contains all nodes' initial nstate
+        self.gtrace = GTrace()  # a gtrace is the record of all transitions
+        self.broadcast_msgs = []  # a list of all sent messages by the participating nodes
+        """ init the test files """
+        self.file_name = self.file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_" + str(
+            int(time.time())) + ".json"
+        GiskardTester.init_nstate_test_file(self.file_name)
         self.file_name2 = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
-        f = open(self.file_name2, "w")
-        f.write("")
-        f.close()
-        self.nstates_json = list()
-        self.nodes = []
-        self.init_gstate = GState()
-        self.gtrace = GTrace()
-        self.broadcast_msgs = []
+        GiskardTester.init_nstate_test_file(self.file_name2)
+        """ Start the message receiving loop """
         t1 = threading.Thread(target=self.tester_loop, args=())
         t1.start()
+
+    @staticmethod
+    def init_nstate_test_file(file_name: str):
+        f = open(file_name, "w")
+        f.write("")
+        f.close()
+
+    @staticmethod
+    def update_nstate_test_file(file_name: str, nstates_json: str):
+        f = open(file_name, "w")
+        f.write(json.dumps(nstates_json, indent=4))
+        f.close()
 
     @staticmethod
     def create_socket(i, context, poller, sockets):
@@ -76,28 +86,25 @@ class GiskardTester:
                 if sock in socks and socks[sock] == zmq.POLLIN:
                     [nstate, lm] = sock.recv_pyobj(zmq.DONTWAIT)
                     self.broadcast_msgs = self.broadcast_msgs + lm
-                    if nstate.node_id not in self.nodes:
+                    if nstate.node_id not in self.nodes:  # node not yet connected -> add init nstate to init_gstate
                         self.nodes.append(nstate.node_id)
                         self.init_gstate.gstate.update({nstate.node_id: [nstate]})
                         self.init_gstate.broadcast_msgs = self.init_gstate.broadcast_msgs + lm
-                        if len(self.nodes) == self.k_peers:
+                        if len(self.nodes) == self.num_endpoints:  # all participating nodes are connected
                             self.gtrace.gtrace[0] = self.init_gstate
                             self.gtrace.gtrace[-1].broadcast_msgs = self.broadcast_msgs
                     else:
+                        """ Add the new nstate to a new gstate and append it to the gtrace """
                         latest_gstate = copy.deepcopy(self.gtrace.gtrace[-1])
                         if not latest_gstate:
                             latest_gstate = GState(self.nodes, {}, self.broadcast_msgs)
                         latest_gstate.gstate[nstate.node_id].append(nstate)
                         latest_gstate.broadcast_msgs = self.broadcast_msgs
                         self.gtrace.gtrace.append(latest_gstate)
-                    #print("\n\n\nTester Msg received ", nstate.node_id, "\n\n\n")
+                    """ Add the new nstate to the test files """
                     self.nstates_json.append(jsonpickle.encode([nstate, self.broadcast_msgs], unpicklable=True))
-                    f = open(self.file_name, "w")
-                    f.write(json.dumps(self.nstates_json, indent=4))
-                    f.close()
-                    f = open(self.file_name2, "w")
-                    f.write(json.dumps(self.nstates_json, indent=4))
-                    f.close()
+                    GiskardTester.update_nstate_test_file(self.file_name, self.nstates_json)
+                    GiskardTester.update_nstate_test_file(self.file_name2, self.nstates_json)
         # exit from loop, shutdown socket connections
         for sock in self.sockets:
             self.poller.unregister(sock)
@@ -126,75 +133,3 @@ class GiskardTester:
         f.close()
         gstate.broadcast_msgs = broadcast_msgs
         return gstate
-
-    def _process(self, message):
-        type_tag = message.message_type
-
-        if type_tag == Message.CONSENSUS_NOTIFY_PEER_CONNECTED:
-            notification = consensus_pb2.ConsensusNotifyPeerConnected()
-            notification.ParseFromString(message.content)
-
-            data = notification.peer_info
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_PEER_DISCONNECTED:
-            notification = consensus_pb2.ConsensusNotifyPeerDisconnected()
-            notification.ParseFromString(message.content)
-
-            data = notification.peer_id
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_PEER_MESSAGE:
-            notification = consensus_pb2.ConsensusNotifyPeerMessage()
-            notification.ParseFromString(message.content)
-
-            header = consensus_pb2.ConsensusPeerMessageHeader()
-            header.ParseFromString(notification.message.header)
-
-            peer_message = PeerMessage(
-                header=header,
-                header_bytes=notification.message.header,
-                header_signature=notification.message.header_signature,
-                content=notification.message.content)
-
-            data = peer_message, notification.sender_id
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_BLOCK_NEW:
-            notification = consensus_pb2.ConsensusNotifyBlockNew()
-            notification.ParseFromString(message.content)
-
-            data = notification.block
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_BLOCK_VALID:
-            notification = consensus_pb2.ConsensusNotifyBlockValid()
-            notification.ParseFromString(message.content)
-
-            data = notification.block_id
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_BLOCK_INVALID:
-            notification = consensus_pb2.ConsensusNotifyBlockInvalid()
-            notification.ParseFromString(message.content)
-
-            data = notification.block_id
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_BLOCK_COMMIT:
-            notification = consensus_pb2.ConsensusNotifyBlockCommit()
-            notification.ParseFromString(message.content)
-
-            data = notification.block_id
-
-        elif type_tag == Message.CONSENSUS_NOTIFY_ENGINE_DEACTIVATED:
-            self.stop()
-            data = None
-
-        elif type_tag == Message.PING_REQUEST:
-            data = None
-
-        else:
-            raise exceptions.ReceiveError(
-                'Received unexpected message type: {}'.format(type_tag))
-
-        self._stream.send_back(
-            message_type=Message.CONSENSUS_NOTIFY_ACK,
-            correlation_id=message.correlation_id,
-            content=consensus_pb2.ConsensusNotifyAck().SerializeToString())
-
-        return type_tag, data

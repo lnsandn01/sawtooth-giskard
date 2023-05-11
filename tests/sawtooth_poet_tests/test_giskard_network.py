@@ -58,7 +58,7 @@ class TestGiskardNetwork(unittest.TestCase):
                 'ztest_maximum_win_deviation': 3.075,
                 'ztest_minimum_win_count': 3
             },
-            'dishonest_nodes': 1})
+            'dishonest_nodes': 0})
 
     def test_poet_smoke(self):
         '''
@@ -103,7 +103,7 @@ class TestGiskardNetwork(unittest.TestCase):
         '''
         poet_kwargs = {} if poet_kwargs is None else poet_kwargs
         giskard_tester = None
-        giskard_tester = GiskardTester(start_nodes_per_round, start_nodes_per_round)
+        giskard_tester = GiskardTester(start_nodes_per_round)
         self.start_new_nodes(
             processors, peering, schedulers,
             start_nodes_per_round, 0, poet_kwargs, dishonest_nodes)

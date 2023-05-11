@@ -80,7 +80,7 @@ class GiskardEngine(Engine):
         self.k_peers = k_peers
         self.node = None
         # original NState from the formal specification
-        self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
+        self.nstate = None
         self.prepareQC_last_view = None
         self.hanging_prepareQC_new_proposer = False
         # connection to GiskardTester, to send state updates
