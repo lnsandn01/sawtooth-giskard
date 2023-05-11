@@ -1367,9 +1367,14 @@ class Giskard:
 
     @staticmethod
     def get_inputs_for_transition(t, state: NState, state_prime: NState, peers, old_version=False):
+        """ We only transmit the nstate to the tester, so we don't have other data, like the block_cache,
+        so we need to generate those inputs from this and the next state.
+        This proofs to be the spot for many bugs, as now the same executions need to be done in two places,
+        the engine and here. Be careful when changing something in the engine, the transition functions or here"""
         msg = None
         block_cache = None
         lm = []
+        dishonest = False
         if t == giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE:
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
@@ -1392,12 +1397,13 @@ class Giskard:
                     parent_block = tmp_block_cache.block_store.get_parent_block(msg.block)
                 if parent_block is None:  # received a prepareblock out of order, so no parent exists yet
                     lm.append(Giskard.GenesisBlock_message(state))  # create wrong input so transition will fail
-                    return [msg, block_cache, lm]
+                    return [msg, block_cache, lm, dishonest]
                 quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
                 lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, tmp_block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
             msg = state.in_messages[-1]
-            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state,msg), state_prime, peers)
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state, msg), state_prime,
+                                                                             peers)
             tmp_block_cache = copy.deepcopy(block_cache)
             lm = []
             if not Giskard.prepare_qc_already_sent(state, msg.block):
@@ -1405,7 +1411,8 @@ class Giskard:
             lm = lm + Giskard.pending_PrepareVote(state, msg, tmp_block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
             msg = state.in_messages[-1]
-            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state,msg), state_prime, peers)
+            block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state, msg), state_prime,
+                                                                             peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREQC_LAST_BLOCK_NEW_PROPOSER_TYPE:
             msg = state.in_messages[-1]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
@@ -1443,8 +1450,9 @@ class Giskard:
             msg = state.in_messages[-1]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
-            lm = Giskard.pending_PrepareVote(state, msg, tmp_block_cache)
-        return [msg, block_cache, lm]
+            lm = Giskard.pending_PrepareVote(state, msg, tmp_block_cache)  # TODO check what i can do maliciously here
+            dishonest = True
+        return [msg, block_cache, lm, dishonest]
 
     # endregion
 
@@ -1472,64 +1480,52 @@ class Giskard:
         on pre-state and post-state, in which one participating node makes a protocol-following
         local state transition, and the network broadcasts and records its outgoing messages
         to the other participating nodes. """
-        full_node = GiskardNode(node, gstate.gstate[node][-1].node_view, False, None)
+        nstate = gstate.gstate[node][-1]
+        nstate_prime = gstate_prime.gstate[node][-1]
+        full_node = GiskardNode(node, nstate.node_view, False, None)
         transition_correct = False
+        """ Go through all possible transitions,
+        execute them on nstate and compare with nstate_prime (the next state) """
         for process in giskard_state_transition_type.all_transition_types:
-            """ the in_message buffer is not allowed to be empty for any transition other than the initial block proposal"""
-            if len(gstate.gstate[node][-1].in_messages) == 0 \
-                and not Giskard.is_block_proposer(full_node, full_node.node_view, nodes):
-                return True
+            """ We only check this transition once, for the initial proposer,
+            which won't have any messages in the out_messages at this point """
             if process == giskard_state_transition_type.PROPOSE_BLOCK_INIT_TYPE \
-                    and len(gstate.gstate[node][-1].out_messages) > 0:
-                if len(gstate.gstate[node][-1].in_messages) != 0:  # we only check this transition once
-                    continue
-                return True  # this is the transition right after the initial proposition of blocks
-            msg, block_cache, lm = Giskard.get_inputs_for_transition(
-                process,
-                gstate.gstate[node][-1],
-                gstate_prime.gstate[node][-1],
-                nodes,
-                old_version)
+                    and len(nstate.out_messages) > 0:
+                continue
+            """ The in_message buffer is not allowed to be empty
+            for any transition other than the initial block proposal"""
+            if len(nstate.in_messages) == 0 \
+                    and (not Giskard.is_block_proposer(full_node, full_node.node_view, nodes)
+                         or (Giskard.is_block_proposer(full_node, full_node.node_view, nodes)
+                             and len(nstate.out_messages) > 0)):  # The state right after the initial proposal
+                return True
+            """ Pull out inputs and create a mock block_cache """
+            msg, block_cache, lm, dishonest = Giskard.get_inputs_for_transition(process, nstate, nstate_prime,
+                                                                     nodes, old_version)
             full_node.block_cache = block_cache
-            found_transition = Giskard.get_transition(process,
-                                                      gstate.gstate[node][-1],
-                                                      msg,
-                                                      gstate_prime.gstate[node][-1],
-                                                      lm,
-                                                      full_node,
-                                                      block_cache,
-                                                      nodes,
-                                                      old_version)
-            #gstate_bmsgs = Giskard.broadcast_messages(gstate,
-            #                                          gstate.gstate[node][-1],
-            #                                          gstate_prime.gstate[node][-1],
-            #                                          lm,
-            #                                          nodes)
+            full_node.dishonest = dishonest
+            """ Check if the transition the one given in the process variable """
+            found_transition = Giskard.get_transition(process, nstate, msg, nstate_prime, lm, full_node,
+                                                      block_cache, nodes, old_version)
+            """ gstate_bmsgs = Giskard.broadcast_messages(gstate, nstate, nstate_prime, lm, nodes) 
+            This is done in the spec, but complicates things, -> changed to what we basically want to proof """
             equal = True
             if equal:
                 for m in lm:
-                    if not m in gstate_prime.broadcast_msgs:
+                    if m not in gstate_prime.broadcast_msgs:
                         equal = False
                         break
 
             if found_transition and equal:
                 transition_correct = True  # CHANGE FROM THE ORIGINAL SPECIFICATION there whole gstates are compared
-                file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
-                f = open(file_name)
-                content = f.read()
-                nr = jsonpickle.decode(content)
-                f.close()
-                nr = int(nr)
-                nr += 1
-                f = open(file_name, "w")
-                f.write(str(nr))
-                f.close()
+                Giskard.inc_nr_of_checked_transitions()
                 break
-        if not transition_correct:
-            import pdb; pdb.set_trace()
+        if not transition_correct:  # check if transition was a timeout
+            import pdb;
+            pdb.set_trace()
             return gstate_prime == \
                 GState(nodes,
-                       {node: Giskard.flip_timeout(gstate.gstate[node][-1])
+                       {node: Giskard.flip_timeout(nstate)
                        if Giskard.is_member(node, nodes) else gstate.gstate[node] for node in gstate.gstate},
                        gstate.broadcast_msgs)
         else:
@@ -1542,14 +1538,11 @@ class Giskard:
     def protocol_trace(gtrace: GTrace, old_version=False) -> bool:
         nodes = list(set(gtrace.gtrace[-1].gstate.keys()))
         nodes.sort(key=lambda h: int(h, 16))
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
-        f = open(file_name, "w")
-        f.write(str(0))
-        f.close()
+        Giskard.reset_nr_of_checked_transitions()
         for node in nodes:
             for i in range(0, len(gtrace.gtrace)):
                 if i > 0 and gtrace.gtrace[i].gstate[node][-1] == gtrace.gtrace[i - 1].gstate[node][-1]:
-                    continue   # the gtrace is updated after every local state transition, so only one node will have a new transition -> skip the rest
+                    continue  # the gtrace is updated after every local state transition, so only one node will have a new transition -> skip the rest
                 if i == len(gtrace.gtrace) - 1:
                     continue  # the last gstates have no further transitions so we skip them
 
@@ -1571,6 +1564,26 @@ class Giskard:
             if gtrace.gtrace[j].gstate[node][-1] != tmp_gstate.gstate[node][-1]:
                 return gtrace.gtrace[j]
         return None
+
+    @staticmethod
+    def inc_nr_of_checked_transitions():
+        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
+        f = open(file_name)
+        content = f.read()
+        nr = jsonpickle.decode(content)
+        f.close()
+        nr = int(nr)
+        nr += 1
+        f = open(file_name, "w")
+        f.write(str(nr))
+        f.close()
+
+    @staticmethod
+    def reset_nr_of_checked_transitions():
+        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
+        f = open(file_name, "w")
+        f.write(str(0))
+        f.close()
 
     @staticmethod
     def PrepareVote_about_block_in_view_global(gtrace: GTrace, i: int,

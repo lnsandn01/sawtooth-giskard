@@ -54,7 +54,7 @@ class GiskardEngine(Engine):
         Handles incoming messages, validates blocks
         Proposes new Blocks if it is Proposer in the current view"""
 
-    def __init__(self, path_config, component_endpoint, validator_connect):
+    def __init__(self, path_config, component_endpoint, validator_connect, dishonest=False, k_peers=2):
         # components
         self._path_config = path_config
         self._component_endpoint = component_endpoint
@@ -72,14 +72,12 @@ class GiskardEngine(Engine):
         self._pending_forks_to_resolve = PendingForks()
 
         """ Giskard stuff"""
-        self.dishonest = False
-        # if dishonest == "dishonest":
-        #    dishonest = True
+        self.dishonest = dishonest
         self.all_initial_blocks_proposed = False
         self.genesis_proposed = False
         self.new_network = False
         self.peers = []
-        self.k_peers = 2
+        self.k_peers = k_peers
         self.node = None
         # original NState from the formal specification
         self.nstate = None  # node identifier TODO get that from the registry service / the epoch protocol
@@ -229,10 +227,6 @@ class GiskardEngine(Engine):
         tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
         while not tracker.done:
             continue
-        """file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/engine_" + validator_id + ".txt"
-        f = open(file_name, "w")
-        f.write("")
-        f.close()"""
 
         # 1. Wait for an incoming message.
         # 2. Check for exit.
@@ -280,7 +274,7 @@ class GiskardEngine(Engine):
                             self._handle_prepare_block(msg)
             if len(self.peers) >= self.k_peers and len(self.in_buffer) > 0 \
                     and not self.hanging_prepareQC_new_proposer:
-                handlers = {
+                handlers_peer = {
                     GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
                     GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
                     GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE: self._handle_view_change,
@@ -289,11 +283,11 @@ class GiskardEngine(Engine):
                 }
                 try:
                     gmsg = self.in_buffer.pop(0)
-                    handle_msg = handlers[gmsg.message_type]
+                    handle_peer_msg = handlers_peer[gmsg.message_type]
                 except:
                     LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
                 else:
-                    handle_msg(gmsg)
+                    handle_peer_msg(gmsg)
                     continue
             try:
                 try:

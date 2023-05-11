@@ -27,12 +27,13 @@ from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 
 class GiskardTester:
-    def __init__(self, num_endpoints):
+    def __init__(self, num_endpoints, k_peers):
         print("init tester")
         """ Create Streams for each engine in the net for exchanging nstates with each other """
         self.exit = False
         self.exited = False
         self.num_endpoints = num_endpoints
+        self.k_peers = k_peers
         self.sockets = []
         self.context = zmq.Context()
         self.poller = zmq.Poller()
@@ -79,7 +80,7 @@ class GiskardTester:
                         self.nodes.append(nstate.node_id)
                         self.init_gstate.gstate.update({nstate.node_id: [nstate]})
                         self.init_gstate.broadcast_msgs = self.init_gstate.broadcast_msgs + lm
-                        if len(self.nodes) == 2:
+                        if len(self.nodes) == self.k_peers:
                             self.gtrace.gtrace[0] = self.init_gstate
                             self.gtrace.gtrace[-1].broadcast_msgs = self.broadcast_msgs
                     else:

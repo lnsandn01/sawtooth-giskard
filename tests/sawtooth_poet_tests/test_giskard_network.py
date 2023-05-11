@@ -43,9 +43,9 @@ class TestGiskardNetwork(unittest.TestCase):
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
             'rounds': 1,
-            'start_nodes_per_round': 2,
+            'start_nodes_per_round': 3,
             'stop_nodes_per_round': 0,
-            'batches': 4,
+            'batches': 12,
             'time_between_batches': 0,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,
@@ -56,8 +56,9 @@ class TestGiskardNetwork(unittest.TestCase):
                 'population_estimate_sample_size': 50,
                 'signup_commit_maximum_delay': 0,
                 'ztest_maximum_win_deviation': 3.075,
-                'ztest_minimum_win_count': 3,
-            }})
+                'ztest_minimum_win_count': 3
+            },
+            'dishonest_nodes': 1})
 
     def test_poet_smoke(self):
         '''
@@ -86,7 +87,8 @@ class TestGiskardNetwork(unittest.TestCase):
             stop_nodes_per_round=1,
             batches=10,
             time_between_batches=1,
-            poet_kwargs=None):
+            poet_kwargs=None,
+            dishonest_nodes=0):
         '''
         The tests that actually run are just wrappers around
         this function. The intent is to make it easy to tweak
@@ -101,10 +103,10 @@ class TestGiskardNetwork(unittest.TestCase):
         '''
         poet_kwargs = {} if poet_kwargs is None else poet_kwargs
         giskard_tester = None
-        giskard_tester = GiskardTester(start_nodes_per_round)
+        giskard_tester = GiskardTester(start_nodes_per_round, start_nodes_per_round)
         self.start_new_nodes(
             processors, peering, schedulers,
-            start_nodes_per_round, 0, poet_kwargs)
+            start_nodes_per_round, 0, poet_kwargs, dishonest_nodes)
         LOGGER.info("\n\nstarted nodes\n\n")
         for round_ in range(rounds):
             if round_ == 0:
@@ -180,22 +182,32 @@ class TestGiskardNetwork(unittest.TestCase):
                         schedulers,
                         start_nodes_per_round,
                         round_,
-                        poet_kwargs):
+                        poet_kwargs,
+                        dishonest_nodes):
         start = round_ * start_nodes_per_round
+        started_dishonest_nodes = 0
         for num in range(start, start + start_nodes_per_round):
-            self.start_node(num, processors, peering, schedulers, poet_kwargs)
+            if started_dishonest_nodes < dishonest_nodes:
+                started_dishonest_nodes += 1
+                dishonest = True
+            else:
+                dishonest = False
+            self.start_node(num, processors, peering, schedulers, poet_kwargs, dishonest, start_nodes_per_round)
 
     def start_node(self, num,
                    processors,
                    peering,
                    schedulers,
-                   poet_kwargs):
+                   poet_kwargs,
+                   dishonest,
+                   k_peers):
         LOGGER.info('Starting node %s', num)
         sawtooth_home = mkdtemp()
         with SetSawtoothHome(sawtooth_home):
             processes = NodeController.start_node(
                 num, processors, peering, schedulers,
-                sawtooth_home, NodeController.validator_cmds, poet_kwargs, "")
+                sawtooth_home, NodeController.validator_cmds,
+                poet_kwargs, dishonest, k_peers)
 
         # Check that none of the processes have returned
         for proc in processes:
