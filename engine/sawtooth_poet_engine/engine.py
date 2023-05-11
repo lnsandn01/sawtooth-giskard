@@ -72,26 +72,25 @@ class GiskardEngine(Engine):
         self._pending_forks_to_resolve = PendingForks()
 
         """ Giskard stuff"""
-        self.dishonest = dishonest
-        self.all_initial_blocks_proposed = False
-        self.genesis_proposed = False
-        self.new_network = False
-        self.peers = []
-        self.k_peers = k_peers
-        self.node = None
-        # original NState from the formal specification
-        self.nstate = None
-        self.prepareQC_last_view = None
-        self.hanging_prepareQC_new_proposer = False
-        # connection to GiskardTester, to send state updates
-        tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PUB)
-        LOGGER.info("socket created " + tester_endpoint)
-        self.socket.connect(tester_endpoint)
-        self.in_buffer = []
+        self.dishonest = dishonest  # dishonest nodes propose their own blocks of same height as another block
+        self.k_peers = k_peers  # the number of participating nodes in this epoche (as of now only one epoche is tested)
 
-        """ end Giskard stuff """
+        self.majority_factor = 2 / 3
+        self.peers = []  # the node_ids of the participating nodes
+        self.all_initial_blocks_proposed = False  # used to switch from propose_block_init_set
+        self.genesis_received = False  # so the first block to be proposed is the gensis block
+        self.new_network = False  # also used for switching between initially proposing the genesis block or not
+        self.prepareQC_last_view = None  # the highest prepareQC of the last view, used as the parent block for the view
+        self.hanging_prepareQC_new_proposer = False  # used to postpone the generation of new blocks, as there are not always 3 blocks available
+        self.in_buffer = []  # used for the case that this node is not fully connected yet, but other nodes are and already sent messages
+        self.node = None
+        self.nstate = None
+        """ connection to GiskardTester, to send state updates """
+        tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
+        self.context = zmq.Context()  # zmq socket to send nstate updates after a transition via tcp
+        self.socket = self.context.socket(zmq.PUB)
+        self.socket.connect(tester_endpoint)
+        LOGGER.info("socket connected " + tester_endpoint)
 
     # Ignore invalid override pylint issues
     # pylint: disable=invalid-overridden-method
@@ -213,9 +212,10 @@ class GiskardEngine(Engine):
 
         signer = _load_identity_signer(self._path_config.key_dir, 'validator')
         validator_id = signer.get_public_key().as_hex()
-        self.peers.append(validator_id)
-        stream = Stream(self._component_endpoint)
-        block_cache = _BlockCacheProxy(self._service, stream)
+        """ Giskard stuff """
+        self.peers.append(validator_id)  # append myself to the peers list, which is used to check for quorums
+        stream = Stream(self._component_endpoint)  # message stream for the block iterator in the block_cache
+        block_cache = _BlockCacheProxy(self._service, stream)  # here are blocks stored
         _batch_publisher = _BatchPublisherProxy(stream, signer)
         self.node = GiskardNode(validator_id, 0, self.dishonest, block_cache)
         self.nstate = NState(self.node)
@@ -223,10 +223,7 @@ class GiskardEngine(Engine):
         if self._get_chain_head().block_num >= 2:
             self.all_initial_blocks_proposed = True
         # send empty state to the GiskardTester
-        state_msg = pickle.dumps([self.nstate, []], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update([])
 
         # 1. Wait for an incoming message.
         # 2. Check for exit.
@@ -249,46 +246,19 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            if not self.genesis_proposed and Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):
-                """ chain head is the genesis block -> propose init block """
-                self.node.block_cache.pending_blocks.append(copy.deepcopy(self._get_chain_head()))
-                self.genesis_proposed = True
-            if len(self.peers) >= self.k_peers and self.new_network and not self.all_initial_blocks_proposed:
-                """ Propose chain head if it is the genesis block """
-                # TODO check what checks are necessary here by poet
-                if Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):
-                    if len(self.node.block_cache.pending_blocks) >= 3:
-                        self.nstate, lm = Giskard.propose_block_init_set(
-                            self.nstate, None, self.node.block_cache)
-                        LOGGER.info("propose new block from while check: count msgs: " + str(len(lm)))
-                        if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER:
-                            self.all_initial_blocks_proposed = True
-                            state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
-                            tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-                            while not tracker.done:
-                                continue
-                        self._send_out_msgs(lm)
-                        for msg in lm:
-                            if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
-                                self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
-                            self._handle_prepare_block(msg)
-            if len(self.peers) >= self.k_peers and len(self.in_buffer) > 0 \
+            """ Do the initial block proposal if necessary """
+            if not self.all_initial_blocks_proposed and self.new_network \
+                    and len(self.peers) / self.k_peers >= self.majority_factor \
+                    and Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):
+                self._initial_block_proposal()
+
+            """ Are you now connected to a majority of peers, handle the buffered msgs"""
+            if len(self.peers) / self.k_peers >= self.majority_factor and len(self.in_buffer) > 0 \
                     and not self.hanging_prepareQC_new_proposer:
-                handlers_peer = {
-                    GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
-                    GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
-                    GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE: self._handle_view_change,
-                    GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC: self._handle_prepare_qc,
-                    GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC: self._handle_view_change_qc
-                }
-                try:
-                    gmsg = self.in_buffer.pop(0)
-                    handle_peer_msg = handlers_peer[gmsg.message_type]
-                except:
-                    LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
-                else:
-                    handle_peer_msg(gmsg)
-                    continue
+                self._handle_buffered_msg()
+                continue
+
+            """ handle incoming messages """
             try:
                 try:
                     type_tag, data = updates.get(timeout=0.1)
@@ -297,10 +267,6 @@ class GiskardEngine(Engine):
                 else:
                     LOGGER.debug('Received message: %s',
                                  Message.MessageType.Name(type_tag))
-                    """f = open(file_name, "a")
-                    f.write(str(type_tag) + "\n")
-                    f.write(str(data) + "\n")
-                    f.close()"""
                     try:
                         LOGGER.info('Received message: %s',
                                     Message.MessageType.Name(type_tag))
@@ -319,6 +285,49 @@ class GiskardEngine(Engine):
                 self._try_to_publish()
             except Exception:  # pylint: disable=broad-except
                 LOGGER.exception("Unhandled exception in message loop")
+
+    def _initial_block_proposal(self):
+        """ The chain head is the genesis block in a new network -> propose it as the initial block """
+        if not self.genesis_received:
+            self.node.block_cache.pending_blocks.append(copy.deepcopy(self._get_chain_head()))
+            self.genesis_received = True
+        """ Propose the initial 3 blocks """
+        # TODO check what checks are necessary here by poet about the blocks
+        if len(self.node.block_cache.pending_blocks) >= 3:
+            self.nstate, lm = Giskard.propose_block_init_set(
+                self.nstate, None, self.node.block_cache)
+            LOGGER.info("propose init blocks; sending: " + str(len(lm)) + " msgs")
+            if self.node.block_cache.blocks_proposed_num == LAST_BLOCK_INDEX_IDENTIFIER:
+                self.all_initial_blocks_proposed = True
+                self._send_state_update(lm)
+            self._send_out_msgs(lm)
+            for msg in lm:
+                if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
+                    self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
+                self._handle_prepare_block(msg)  # send prepare blocks to yourself
+
+    def _handle_buffered_msg(self):
+        """ handle buffered msgs after all peers are connected"""
+        handlers_peer = {
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
+            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE: self._handle_view_change,
+            GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC: self._handle_prepare_qc,
+            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC: self._handle_view_change_qc
+        }
+        try:
+            gmsg = self.in_buffer.pop(0)
+            handle_peer_msg = handlers_peer[gmsg.message_type]
+        except:
+            LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
+        else:
+            handle_peer_msg(gmsg)
+
+    def _send_state_update(self, lm):
+        state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
+        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
+        while not tracker.done:
+            continue
 
     def _try_to_publish(self):
         if self._published or self._validating_blocks:
@@ -347,18 +356,18 @@ class GiskardEngine(Engine):
         # Giskard -------------
         # TODO check if this block was already proposed
         self.node.block_cache.pending_blocks.append(block)
-        #if block.block_num == 5:
-            #import pdb; pdb.set_trace()
+        # if block.block_num == 5:
+        # import pdb; pdb.set_trace()
         if self.hanging_prepareQC_new_proposer \
                 and len(self.node.block_cache.pending_blocks) >= 3:
             # TODO call all transitions with timeouts in mind
             self.hanging_prepareQC_new_proposer = False
             parent_block = self.prepareQC_last_view.block
             if parent_block is None:
-                LOGGER.error("parent block of block_num: "+block.block_num+" is none in _handle_new_block, node: " +
+                LOGGER.error("parent block of block_num: " + block.block_num + " is none in _handle_new_block, node: " +
                              self._validator_connect[-1])
-            #LOGGER.info("\n\n\npending_blocks: "+self.node.block_cache.pending_blocks.__str__()+"\n\n\n")
-            #lm = Giskard.make_PrepareBlocks(
+            # LOGGER.info("\n\n\npending_blocks: "+self.node.block_cache.pending_blocks.__str__()+"\n\n\n")
+            # lm = Giskard.make_PrepareBlocks(
             #    self.nstate,
             #    Giskard.adhoc_ParentBlock_msg(self.nstate, parent_block),
             #    self.node.block_cache)
@@ -366,13 +375,10 @@ class GiskardEngine(Engine):
                 Giskard.process_PrepareQC_last_block_new_proposer_set(
                     self.nstate, self.nstate.in_messages[0], self.node.block_cache, self.peers)
             self.node.block_cache.blocks_proposed_num += len(lm)
-            #LOGGER.info("\n\n\npending_blocks: " + self.node.block_cache.pending_blocks.__str__() + "\n\n\n")
+            # LOGGER.info("\n\n\npending_blocks: " + self.node.block_cache.pending_blocks.__str__() + "\n\n\n")
             LOGGER.info("propose new block from handle_new_block: count msgs: " + str(len(lm)))
             self.node.block_cache.blocks_proposed_num += len(lm)
-            state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
-            tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-            while not tracker.done:
-                continue
+            self._send_state_update(lm)
             self.node.block_cache.blocks_reached_qc_current_view = []  # reset those as view change happened
             self._send_out_msgs(lm)
             for msg in lm:
@@ -414,7 +420,8 @@ class GiskardEngine(Engine):
         if self.hanging_prepareQC_new_proposer:
             return  # view change all further messages of this view can be discarded
         # TODO handle recovery viewchange msgs if timeout
-        if len(self.peers) < self.k_peers or len(self.in_buffer) > 0:  # when not all peers are connected yet, collect msgs in a buffer
+        if len(self.peers) / self.k_peers < self.majority_factor or len(
+                self.in_buffer) > 0:  # when not all peers are connected yet, collect msgs in a buffer
             self.in_buffer.append(gmsg)
             return
         handlers = {
@@ -469,8 +476,8 @@ class GiskardEngine(Engine):
 
         self._process_pending_forks()
         # Giskard -------------
-        #self.node.block_cache.remove_pending_block(block_id)
-        #self.node.block_cache.block_store.remove_uncommitted_block(block_id) # TODO check if also need to do this at _handle_valid_block
+        # self.node.block_cache.remove_pending_block(block_id)
+        # self.node.block_cache.block_store.remove_uncommitted_block(block_id) # TODO check if also need to do this at _handle_valid_block
         # Giskard End ---------
 
     def _handle_prepare_block(self, msg: GiskardMessage):
@@ -481,10 +488,7 @@ class GiskardEngine(Engine):
             self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, []], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update([])
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or sth
         if msg.block == GiskardGenesisBlock():
             parent_block = GiskardGenesisBlock()
@@ -496,7 +500,7 @@ class GiskardEngine(Engine):
         if parent_block is not None and Giskard.prepare_stage(self.nstate, parent_block, self.peers):
             #    """ first block to be proposed apart from the genesis block """
             LOGGER.info("parent in prepare stage")
-            #if msg.block.block_num == 5 \
+            # if msg.block.block_num == 5 \
             #        and self._validator_connect[-1] == "0":
             #    import pdb; pdb.set_trace()
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
@@ -504,20 +508,14 @@ class GiskardEngine(Engine):
         else:
             LOGGER.info("parent not in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update(lm)
         self._send_out_msgs(lm)
 
     def _handle_prepare_vote(self, msg):
         LOGGER.info("Handle PrepareVote")
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, []], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update([])
         # TODO replace with new get transition function
         if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, self.peers):
             LOGGER.info("prepvote in prep stage")
@@ -536,31 +534,22 @@ class GiskardEngine(Engine):
         for m in lm:
             if m.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
                 if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
-                    #self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
+                    # self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
                     if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
                         self.prepareQC_last_view = msg  # TODO maybe change directly to view change here
-        state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update(lm)
         self._send_out_msgs(lm)
 
     def _handle_view_change(self, msg):
         LOGGER.info("Handle ViewChange")
         self.nstate = Giskard.add(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, []], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update([])
 
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
         self.node.block_cache.remove_pending_block(msg.block.block_id)
         self.nstate = Giskard.add(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, []], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update([])
         if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
             self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
         if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
@@ -572,8 +561,10 @@ class GiskardEngine(Engine):
                 if len(self.node.block_cache.pending_blocks) >= 3:
                     self.nstate, lm = \
                         Giskard.process_PrepareQC_last_block_new_proposer_set(
-                            self.nstate, msg, self.node.block_cache, self.peers)  # TODO prolong sending state update until all 3 blocks sent?
-                    self.node.block_cache.blocks_proposed_num += len(lm)  # for the case less than 3 blocks were proposed
+                            self.nstate, msg, self.node.block_cache,
+                            self.peers)  # TODO prolong sending state update until all 3 blocks sent?
+                    self.node.block_cache.blocks_proposed_num += len(
+                        lm)  # for the case less than 3 blocks were proposed
                 else:
                     self.hanging_prepareQC_new_proposer = True
                     return
@@ -581,16 +572,14 @@ class GiskardEngine(Engine):
                 LOGGER.info("last block no new proposer node: " + self._validator_connect[-1])
                 self.nstate, lm = \
                     Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
-                LOGGER.info("not the new proposer: " + self._validator_connect[-1] + " got view: " + str(self.nstate.node_view))
+                LOGGER.info(
+                    "not the new proposer: " + self._validator_connect[-1] + " got view: " + str(self.nstate.node_view))
             self.node.block_cache.blocks_reached_qc_current_view = []  # reset those as view change happened
         else:
             LOGGER.info("non-last block")
             self.nstate, lm = Giskard.process_PrepareQC_non_last_block_set(
                 self.nstate, msg, self.node.block_cache)
-        state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update(lm)
         self._send_out_msgs(lm)
         for msg in lm:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
@@ -599,15 +588,9 @@ class GiskardEngine(Engine):
     def _handle_view_change_qc(self, msg):
         LOGGER.info("Handle ViewChangeQC")
         self.nstate = Giskard.add(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, []], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update([])
         self.nstate, lm = Giskard.process_ViewChangeQC_single_set(self.nstate, msg)
-        state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
-        tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
-        while not tracker.done:
-            continue
+        self._send_state_update(lm)
 
     def _send_out_msgs(self, lm):
         LOGGER.info("send message: " + str(len(lm)))
