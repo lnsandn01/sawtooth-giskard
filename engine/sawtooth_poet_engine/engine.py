@@ -379,6 +379,7 @@ class GiskardEngine(Engine):
             tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
             while not tracker.done:
                 continue
+            self.node.block_cache.blocks_reached_qc_current_view = []  # reset those as view change happened
             self._send_out_msgs(lm)
             for msg in lm:
                 self._handle_prepare_block(msg)
@@ -538,10 +539,12 @@ class GiskardEngine(Engine):
                 LOGGER.info("no vote quorum")
             self.nstate, lm = Giskard.process_PrepareVote_wait_set(
                 self.nstate, msg)
-        #for m in lm:
-            #if m.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
-                #if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
-                #    self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
+        for m in lm:
+            if m.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+                if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
+                    #self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
+                    if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
+                        self.prepareQC_last_view = msg  # TODO maybe change directly to view change here
         state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
         tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
         while not tracker.done:
@@ -568,9 +571,7 @@ class GiskardEngine(Engine):
             self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
         if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
             self.prepareQC_last_view = msg
-        if len(self.node.block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER:# \
-            self.node.block_cache.blocks_reached_qc_current_view = []
-               # or msg.block.block_index == 0:  # Last or genesis block
+        if len(self.node.block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER:
             if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("last block new proposer node: " + self._validator_connect[-1])
                 self.node.block_cache.blocks_proposed_num = 0  # resest proposed blocks count
@@ -587,6 +588,7 @@ class GiskardEngine(Engine):
                 self.nstate, lm = \
                     Giskard.process_PrepareQC_last_block_set(self.nstate, msg)
                 LOGGER.info("not the new proposer: " + self._validator_connect[-1] + " got view: " + str(self.nstate.node_view))
+            self.node.block_cache.blocks_reached_qc_current_view = []  # reset those as view change happened
         else:
             LOGGER.info("non-last block")
             self.nstate, lm = Giskard.process_PrepareQC_non_last_block_set(

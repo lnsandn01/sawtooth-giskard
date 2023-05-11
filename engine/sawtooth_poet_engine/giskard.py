@@ -1548,17 +1548,24 @@ class Giskard:
         f.close()
         for node in nodes:
             for i in range(0, len(gtrace.gtrace)):
-                if i < len(gtrace.gtrace) - 1:
-                    tmp_gstate = gtrace.gtrace[i]
-                    next_gstate = Giskard.get_nodes_next_state(gtrace, i, node)
-                    if not next_gstate:  # this node has no further transition
-                        continue
-                    if not Giskard.GState_transition(tmp_gstate, next_gstate, node, nodes, old_version):
-                        return False
+                if i > 0 and gtrace.gtrace[i].gstate[node][-1] == gtrace.gtrace[i - 1].gstate[node][-1]:
+                    continue   # the gtrace is updated after every local state transition, so only one node will have a new transition -> skip the rest
+                if i == len(gtrace.gtrace) - 1:
+                    continue  # the last gstates have no further transitions so we skip them
+
+                tmp_gstate = gtrace.gtrace[i]
+                next_gstate = Giskard.get_nodes_next_state(gtrace, i, node)
+                if not next_gstate:  # this node has no further transition
+                    continue
+                if not Giskard.GState_transition(tmp_gstate, next_gstate, node, nodes, old_version):
+                    return False
         return True
 
     @staticmethod
     def get_nodes_next_state(gtrace: GTrace, i: int, node: str):
+        """ the gtrace is updated after every local state transition,
+        so only one node will have a new transition within the next gstate
+        :returns the next gstate where the node has its next transition """
         tmp_gstate = gtrace.gtrace[i]
         for j in range(i, len(gtrace.gtrace)):
             if gtrace.gtrace[j].gstate[node][-1] != tmp_gstate.gstate[node][-1]:
