@@ -43,7 +43,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
             'rounds': 1,
-            'start_nodes_per_round': 3,
+            'start_nodes_per_round': 2,
             'stop_nodes_per_round': 0,
             'batches': 12,
             'time_between_batches': 0,
@@ -118,19 +118,19 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nsent batches\n\n")
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
-        gstate = GiskardTester.create_final_GState_from_file()
-        """ Check consensus via the height injectivity proofs """
-        TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
-        """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """
-        #peers = list(set(gstate.gstate.keys()))
-        #gtrace = GTrace(peers)
-        #gtrace.gtrace.append(gstate)
-        TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
         self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")
         giskard_tester.exit = True
+        """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """
         while not giskard_tester.exited:
             time.sleep(0.1)
+        TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
+        gstate = GiskardTester.create_final_GState_from_file()
+        GiskardTester.create_info_table()
+        """ Check consensus via the height injectivity proofs """
+        TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
+
+
 
         # Attempt to cleanly shutdown all processes
         for node_num in self.nodes:

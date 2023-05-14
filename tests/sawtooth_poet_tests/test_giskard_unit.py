@@ -21,11 +21,11 @@ class TestGiskardUnit(unittest.TestCase):
     # region basic inputs
     @staticmethod
     def get_basic_nodes():
-        node = GiskardNode("me", 1, False)
-        proposer = GiskardNode("proposer", 1, False)
-        you1 = GiskardNode("you1", 1, False)
-        you2 = GiskardNode("you2", 1, False)
-        you3 = GiskardNode("you3", 1, False)
+        node = GiskardNode("me", False)
+        proposer = GiskardNode("proposer", False)
+        you1 = GiskardNode("you1", False)
+        you2 = GiskardNode("you2", False)
+        you3 = GiskardNode("you3", False)
         return [node, proposer, you1, you2, you3, [node, proposer, you1, you2, you3]]
     # endregion
 

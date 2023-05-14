@@ -309,13 +309,20 @@ class BlockStoreMock:
 
             curr = previous_block
 
+    def get_genesis(self):
+        for block in reversed(self.blocks + self.uncommitted_blocks):
+            if block.block_num == 0:
+                return GiskardBlock(block)
+        return None
+
     def get_parent_block(self, child_block):
         """
         returns the parent block, if there is one in storage
         :param child_block:
         :return: GiskardBlock(parent_block) or None
         """
-        for block in reversed(self.blocks):
+        self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
+        for block in reversed(self.blocks + self.uncommitted_blocks):
             if child_block.previous_id == block.block_id \
                     and child_block.block_num - 1 == block.block_num:
                 return GiskardBlock(block)
@@ -329,10 +336,23 @@ class BlockStoreMock:
         :param parent_block:
         :return: GiskardBlock(parent_block) or None
         """
-        for block in reversed(self.blocks):
+        self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
+        for block in reversed(self.blocks + self.uncommitted_blocks):
             if parent_block.block_id == block.previous_id \
                     and parent_block.block_num + 1 == block.block_num:
                 return GiskardBlock(block)
             if block.block_num < parent_block.block_num:
                 return None
         return None
+
+    def same_height_block_in_storage(self, block) -> bool:
+        """ :return True if a block of the same height
+        e.g. block_num exists in the block storage """
+        self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
+        for b in reversed(self.blocks + self.uncommitted_blocks):
+            if block.block_num == b.block_num:
+                return True
+            if b.block_num < block.block_num:
+                return True  # went past the block height
+        return False
+

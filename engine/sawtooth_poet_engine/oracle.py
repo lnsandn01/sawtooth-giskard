@@ -192,6 +192,12 @@ class _BlockCacheProxy:
         except UnknownBlock:
             return None
 
+    def pending_blocks_same_height_exists(self, block_num):
+        for b in self.pending_blocks:
+            if b.block_num == block_num:
+                return True
+        return False
+
     def remove_pending_block(self, block_id) -> bool:
         for b in self.pending_blocks:
             if b.block_id == block_id:
@@ -286,6 +292,12 @@ class _BlockStoreProxy:
 
             curr = previous_block
 
+    def get_genesis(self):
+        for block in self.get_block_iter():
+            if block.block_num == 0:
+                return GiskardBlock(block)
+        return None
+
     def get_parent_block(self, child_block):
         """
         returns the parent block, if there is one in storage
@@ -313,6 +325,16 @@ class _BlockStoreProxy:
             if block.block_num < parent_block.block_num:
                 return None
         return None
+
+    def same_height_block_in_storage(self, block) -> bool:
+        """ :return True if a block of the same height
+        e.g. block_num exists in the block storage """
+        for b in self.get_block_iter():
+            if block.block_num == b.block_num:
+                return True
+            if b.block_num < block.block_num:
+                return True  # went past the block height
+        return False
 
 
 class _StateViewFactoryProxy:
