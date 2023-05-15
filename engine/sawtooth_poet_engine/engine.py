@@ -74,6 +74,8 @@ class GiskardEngine(Engine):
 
         """ Giskard stuff"""
         self.dishonest = dishonest  # dishonest nodes propose their own blocks of same height as another block
+        if self.dishonest:
+            LOGGER.info("I am dishonest, node: " + self._validator_connect[-1])
         self.k_peers = k_peers  # the number of participating nodes in this epoche (as of now only one epoche is tested)
 
         self.majority_factor = 1
@@ -87,6 +89,7 @@ class GiskardEngine(Engine):
         self.node = None
         self.nstate = None
         self.sent_prep_votes = {}
+        self.recv_malicious_block = False
         """ connection to GiskardTester, to send state updates """
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()  # zmq socket to send nstate updates after a transition via tcp
@@ -428,6 +431,18 @@ class GiskardEngine(Engine):
         except KeyError:
             LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
         else:
+            """ Check if block legit """
+            if gmsg.block.payload == "Beware, I am a malicious block":
+                self.recv_malicious_block = True
+            signer = gmsg.block.signer_id
+            if hasattr(gmsg.block.signer_id, 'hex'):
+                signer = gmsg.block.signer_id.hex()
+            if not self.node.dishonest \
+                    and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers):
+                return
+            if self.node.dishonest and gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
+                self._handle_prepare_block_malicious(gmsg)
+                return
             handle_msg(gmsg)
 
     def _process_pending_forks(self):
@@ -481,31 +496,12 @@ class GiskardEngine(Engine):
         self._send_state_update([])
 
         # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or at the start of the loop
-        """ If the sender of the propose block msg is not the proposer of the current view, discard msg
-        except you are a malicious node """
-        signer = msg.block.signer_id
-        if hasattr(msg.block.signer_id, 'hex'):
-            signer = msg.block.signer_id.hex()
-        if not self.node.dishonest \
-                and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers):
-            self.nstate, lm = Giskard.process_PrepareBlock_wrong_proposer_set(self.nstate, msg)
-            LOGGER.info("node: " + self._validator_connect[-1] + " discarded ProposeBlock: sender is not the proposer")
-            self._send_state_update(lm)
-            self._send_out_msgs(lm)
-            return
-
         """ blocks that are not committed in the network yet,
         we need this as we still need to iterate over them in the block cache to check for parent relations"""
         if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
-            if self.node.dishonest:
-                for b in self.node.block_cache.block_store.uncommitted_blocks:
-                    if b.block_num == msg.block.block_num \
-                            and msg.block.payload == "Beware, I am a malicious block":
-                        self.node.block_cache.block_store.remove_uncommitted_block(b.block_id)
             self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
         self.node.block_cache.remove_pending_block(msg.block.block_id)
-        malicious_propose = None
         if msg.block == GiskardGenesisBlock():
             parent_block = GiskardGenesisBlock()
         else:
@@ -514,48 +510,16 @@ class GiskardEngine(Engine):
                 or (msg.block.block_num - 1 == msg.piggyback_block.block_num
                     and msg.block.previous_id == msg.piggyback_block.block_id):  # get prepareqc from msg
             LOGGER.info("parent in prepare stage")
-            if not self.node.dishonest \
-                    or Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):  # only propose malicious blocks when you are not the proposer for now
-                self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
-                    self.nstate, msg, self.node.block_cache, self.peers)
-            else:  # dishonest nodes don't check if there exists a same height block
-                """ Malicious behaviour """
-                # Double voting possible
-                self.nstate, lm = Giskard.process_PrepareBlock_malicious_vote_set(
-                    self.nstate, msg, self.node.block_cache, self.peers)
-                """ Proposing own version of received block,
-                so there exist malicious blocks in the first place """
-                if msg.block.payload != "Beware, I am a malicious block":  # Only propose one malicious block per received block
-                    malicious_block = copy.deepcopy(msg.block)
-                    malicious_block.payload = "Beware, I am a malicious block"
-                    malicious_block.signer_id = self.node.node_id
-                    if parent_block is None:
-                        parent_block = msg.piggyback_block
-                    previous_adhoc_msg = Giskard.adhoc_ParentBlock_msg(self.nstate,
-                                                                       parent_block)
-                    malicious_propose = Giskard.make_PrepareBlock(self.nstate, previous_adhoc_msg,
-                                                                  self.node.block_cache, msg.block.block_index,
-                                                                  malicious_block)
-                    LOGGER.info("node: " + self._validator_connect[-1] + " proposed a malicious block: " + str(malicious_block.block_num))
+            self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
+                self.nstate, msg, self.node.block_cache, self.peers)
         else:
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
         self._send_state_update(lm)
         self._send_out_msgs(lm)
-        if malicious_propose is not None:
-            self._send_out_msgs([malicious_propose])
-            self._handle_prepare_block(malicious_propose)
 
     def _handle_prepare_vote(self, msg):
         LOGGER.info("Handle PrepareVote")
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
-        """ Check if block legit """
-        signer = msg.block.signer_id
-        if hasattr(msg.block.signer_id, 'hex'):
-            signer = msg.block.signer_id.hex()
-        if not self.node.dishonest \
-                and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers):
-            return
-
         self.node.block_cache.remove_pending_block(msg.block.block_id)
 
         self.nstate = Giskard.add(self.nstate, msg)
@@ -589,13 +553,6 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
-        """ Check if block is legit """
-        signer = msg.block.signer_id
-        if hasattr(msg.block.signer_id, 'hex'):
-            signer = msg.block.signer_id.hex()
-        if not self.node.dishonest \
-                and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers):
-            return
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
         self.node.block_cache.remove_pending_block(msg.block.block_id)
 
@@ -645,6 +602,9 @@ class GiskardEngine(Engine):
         """ Call this function when you are the proposer of the next view,
         and you have received 3 new blocks to be proposed """
         self.node.block_cache.blocks_proposed_num = 0  # reset proposed blocks count
+        for block in self.node.block_cache.pending_blocks:
+            if Giskard.handled_block_same_height_in_msgs(block, self.nstate):
+                self.node.block_cache.remove_pending_block(block.block_id)
         self.nstate, lm = \
             Giskard.process_PrepareQC_last_block_new_proposer_set(
                 self.nstate, msg, self.node.block_cache, self.peers)
@@ -664,6 +624,73 @@ class GiskardEngine(Engine):
         self._send_state_update([])
         self.nstate, lm = Giskard.process_ViewChangeQC_single_set(self.nstate, msg)
         self._send_state_update(lm)
+
+    def _handle_prepare_block_malicious(self, msg: GiskardMessage):
+        LOGGER.info("Handle PrepareBlockMalicious")
+        """  needed for when this node changes to block proposer, to not propose the init blocks again """
+        if not self.all_initial_blocks_proposed and msg.block.block_num >= 2:
+            self.all_initial_blocks_proposed = True
+
+        self.nstate = Giskard.add(self.nstate, msg)
+        self._send_state_update([])
+
+        # TODO call PrepareBlockVoteSet differently -> routinely / on parent reached qc event or at the start of the loop
+        """ blocks that are not committed in the network yet,
+        we need this as we still need to iterate over them in the block cache to check for parent relations"""
+        if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
+            for b in self.node.block_cache.block_store.uncommitted_blocks:
+                if b.block_num == msg.block.block_num \
+                        and msg.block.payload == "Beware, I am a malicious block":
+                    self.node.block_cache.block_store.remove_uncommitted_block(b.block_id)
+            self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
+        """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
+        self.node.block_cache.remove_pending_block(msg.block.block_id)
+        malicious_propose = None
+        if msg.block == GiskardGenesisBlock():
+            parent_block = GiskardGenesisBlock()
+        else:
+            parent_block = self.node.block_cache.block_store.get_parent_block(msg.block)
+        if (parent_block is not None and Giskard.prepare_stage(self.nstate, parent_block, self.peers)) \
+                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
+                    and msg.block.previous_id == msg.piggyback_block.block_id):  # get prepareqc from msg
+            LOGGER.info("parent in prepare stage")
+            """ Malicious behaviour """
+            # Double voting possible
+            self.nstate, lm = Giskard.process_PrepareBlock_malicious_vote_set(
+                self.nstate, msg, self.node.block_cache, self.peers)
+            if len(lm) > 0:
+                if msg.block.signer_id == "NotTrustworthy":
+                    LOGGER.info("voted for nottrustworthy")
+            """ Generate one malicious block for testing """
+            if msg.block.payload != "Beware, I am a malicious block" \
+                    and not self.recv_malicious_block \
+                    and (msg.block.block_num == 3) \
+                    and not Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):  # Only propose one malicious block
+                malicious_propose = self._malicious_propose(msg, parent_block)
+        else:
+            self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
+        self._send_state_update(lm)
+        self._send_out_msgs(lm)
+        if malicious_propose is not None:
+            self._send_out_msgs([malicious_propose])
+            self._handle_prepare_block(malicious_propose)
+
+    def _malicious_propose(self, msg, parent_block):
+        LOGGER.info("trying to be malicious")
+        self.recv_malicious_block = True
+        malicious_block = copy.deepcopy(msg.block)
+        malicious_block.payload = "Beware, I am a malicious block"
+        malicious_block.signer_id = "NotTrustworthy"
+        if parent_block is None:
+            parent_block = msg.piggyback_block
+        previous_adhoc_msg = Giskard.adhoc_ParentBlock_msg(self.nstate,
+                                                           parent_block)
+        malicious_propose = Giskard.make_PrepareBlock(self.nstate, previous_adhoc_msg,
+                                                      self.node.block_cache, msg.block.block_index,
+                                                      malicious_block)
+        LOGGER.info("node: " + self._validator_connect[-1] + " proposed a malicious block: " + str(
+            malicious_block.block_num))
+        return malicious_propose
 
     def _send_state_update(self, lm):
         state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)

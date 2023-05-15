@@ -574,5 +574,5 @@ class TestGiskardUnit(unittest.TestCase):
         assert Giskard.prepare_stage_same_view_height_injective_statement([gtrace], peers), "prepare_stage_height_injectivity failed"
         assert Giskard.precommit_stage_height_injective_statement([gtrace], peers), "precommit_stage_height_injectivity failed"
         assert Giskard.commit_height_injective_statement([gtrace], peers), "commit_stage_height_injectivity failed"
-
+        print("Tested stage_height_injectivity")
     # endregion

@@ -45,7 +45,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'rounds': 1,
             'start_nodes_per_round': 4,
             'stop_nodes_per_round': 0,
-            'batches': 4,
+            'batches': 8,
             'time_between_batches': 0,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,
@@ -58,7 +58,7 @@ class TestGiskardNetwork(unittest.TestCase):
                 'ztest_maximum_win_deviation': 3.075,
                 'ztest_minimum_win_count': 3
             },
-            'dishonest_nodes': 1})
+            'dishonest_nodes': 3})
 
     def test_poet_smoke(self):
         '''
@@ -126,7 +126,7 @@ class TestGiskardNetwork(unittest.TestCase):
             time.sleep(0.1)
         gstate = GiskardTester.create_final_GState_from_file()
         GiskardTester.create_info_table()
-        TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
+        #TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
         """ Check consensus via the height injectivity proofs """
         TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
 

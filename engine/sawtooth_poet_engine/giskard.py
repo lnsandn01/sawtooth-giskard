@@ -36,6 +36,8 @@ class Giskard:
         if len(peers) == 1:
             return True
         if isinstance(node, str):
+            if node == "NotTrustWorthy":
+                return False
             position_in_peers = peers.index(node)
         else:
             position_in_peers = peers.index(node.node_id)
@@ -696,7 +698,6 @@ class Giskard:
                                            and not Giskard.prepare_vote_already_sent(state, msg.block),
                                state.counting_messages)))
 
-
     @staticmethod
     def make_PrepareQC(state: NState, msg: GiskardMessage) -> GiskardMessage:
         """ PrepareQC messages carry nothing, and can only be sent after a quorum number of PrepareVotes,
@@ -867,24 +868,6 @@ class Giskard:
     """ PrepareBlock message-related actions """
 
     # TODO use those two functions
-    @staticmethod
-    def process_PrepareBlock_wrong_proposer(state: NState, msg: GiskardMessage,
-                                       state_prime: NState, lm: List[GiskardMessage], node, peers) -> bool:
-        """ If the proposer is not the right one for the current view - discard the message. """
-        return state_prime == Giskard.discard(state, msg) \
-            and lm == [] \
-            and Giskard.received(state, msg) \
-            and Giskard.honest_node(node) \
-            and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
-            and Giskard.view_valid(state, msg) \
-            and not state.timeout \
-            and not Giskard.is_block_proposer(msg.block.signer_id, state.node_view, peers)
-
-    @staticmethod
-    def process_PrepareBlock_wrong_proposer_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
-        state_prime = Giskard.discard(state, msg)
-        return [state_prime, []]
-
     @staticmethod
     def process_PrepareBlock_duplicate(state: NState, msg: GiskardMessage,
                                        state_prime: NState, lm: List[GiskardMessage], node) -> bool:
@@ -1439,8 +1422,6 @@ class Giskard:
             return Giskard.process_ViewChangeQC_single(state, msg, state_prime, lm, node)
         elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
             return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache, peers)
-        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_WRONG_PROPOSER_TYPE:
-            return Giskard.process_PrepareBlock_wrong_proposer(state, msg, state_prime, lm, node, peers)
 
     @staticmethod
     def create_mock_block_cache_from_counting_msgs(state: NState, state_prime: NState, peers) -> BlockCacheMock:
@@ -1570,9 +1551,6 @@ class Giskard:
                 quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
             lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, tmp_block_cache)  # TODO check what i can do maliciously here
             dishonest = True
-        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_WRONG_PROPOSER_TYPE:
-            msg = state.in_messages[0]
-            lm = []
         return [msg, block_cache, lm, dishonest]
 
     # endregion
@@ -1755,9 +1733,12 @@ class Giskard:
                     blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1],
                                                                                  None,
                                                                                  peers).block_store.blocks
-                    view = min(gstate[node1][0].node_view, gstate[node2][0].node_view)
+                    view = min(gstate[node1][-1].node_view, gstate[node2][-1].node_view)
                     for v, block1, block2 in itertools.product(range(0, view + 1), blocks1,
                                                                blocks2):  # Todo check if views start with 0 or 1
+                        #if block1.block_num == 3 and block2.block_num == 3:
+                        #    import pdb;
+                        #    pdb.set_trace()
                         if node1 in peers \
                                 and node2 in peers \
                                 and block1 != block2 \

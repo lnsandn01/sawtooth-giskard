@@ -224,7 +224,7 @@ class GiskardTester:
                         table.append([msg.block.block_num, nstate.node_view, msg.block.block_index,
                                       msg.block.block_id[0:6], sender, votes, 0, honest])
                 else:
-                    pos = GiskardTester.pos_block_in_table(table, msg.block.block_id)
+                    pos = GiskardTester.pos_block_in_table(table, msg.block.block_id, msg.block.payload)
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
                         table[pos][5] += 1  # update votes
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
@@ -237,10 +237,14 @@ class GiskardTester:
         f.close()
 
     @staticmethod
-    def pos_block_in_table(table, block_id):
+    def pos_block_in_table(table, block_id, payload):
         for i in range(2, len(table)):
-            if table[i][3] == block_id[0:6]:
-                return i
+            if payload == "Beware, I am a malicious block":
+                if table[i][7] == "x":
+                    return i
+            else:
+                if table[i][3] == block_id[0:6]:
+                    return i
             i += 1
         return 3
 
