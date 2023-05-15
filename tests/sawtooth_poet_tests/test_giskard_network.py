@@ -43,9 +43,9 @@ class TestGiskardNetwork(unittest.TestCase):
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
             'rounds': 1,
-            'start_nodes_per_round': 2,
+            'start_nodes_per_round': 4,
             'stop_nodes_per_round': 0,
-            'batches': 12,
+            'batches': 4,
             'time_between_batches': 0,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,
@@ -58,7 +58,7 @@ class TestGiskardNetwork(unittest.TestCase):
                 'ztest_maximum_win_deviation': 3.075,
                 'ztest_minimum_win_count': 3
             },
-            'dishonest_nodes': 0})
+            'dishonest_nodes': 1})
 
     def test_poet_smoke(self):
         '''
@@ -124,9 +124,9 @@ class TestGiskardNetwork(unittest.TestCase):
         """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """
         while not giskard_tester.exited:
             time.sleep(0.1)
-        TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
         gstate = GiskardTester.create_final_GState_from_file()
         GiskardTester.create_info_table()
+        TestGiskardUnit.test_global_state_transitions(None, None, giskard_tester.gtrace)
         """ Check consensus via the height injectivity proofs """
         TestGiskardUnit.test_all_stage_height_injectivity(None, None, GTrace(None, gstate))
 

@@ -96,7 +96,7 @@ class TestGiskardUnit(unittest.TestCase):
                 Block(1, NULL_BLOCK_IDENTIFIER, 54321, 1, "", ""),
                 Block(2, 1, 54321, 2, "", "")])
             block_parent = block_cache.block_store.blocks[-1]
-        block = Giskard.generate_new_block(block_parent, block_cache, 3)
+        block = Giskard.generate_new_block(block_parent, block_cache, 3, block_parent.signer_id)
         block_cache.block_store.blocks.append(block)
         assert self.generate_new_block_parent(block, block_cache, block_parent)
 

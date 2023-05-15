@@ -111,7 +111,7 @@ class GiskardTester:
                     else:
                         continue
                     if len(nstate.in_messages) > 0:
-                        print("\n"+str(nstate.in_messages[0].block.block_num)+"\n")
+                        print("\nGiskardTester handling msg with block_num: "+str(nstate.in_messages[0].block.block_num))
                     self.broadcast_msgs = self.broadcast_msgs + lm
                     if nstate.node_id not in self.nodes:  # node not yet connected -> add init nstate to init_gstate
                         self.nodes.append(nstate.node_id)
@@ -182,10 +182,10 @@ class GiskardTester:
         f.close()
         nstates = jsonpickle.decode(content)
         nodes = []
-        table = [['block_num', 'view', 'block_index', 'proposer', 'votes_in_total', 'qc_in_total'], []]
+        table = [['block_num', 'view', 'block_index', 'block_id', 'proposer', 'votes_in_total', 'qc_in_total', 'honest'], []]
         blocks = []
         nodes_states = {}
-        nodes_last_out_msg = {}
+        handled_msgs = []
         for nst in nstates:
             nstate, broadcast_msgs = jsonpickle.decode(nst, None, None, False, True, False,
                                                        [NState, List[GiskardMessage]])
@@ -200,14 +200,47 @@ class GiskardTester:
                     print(e)
                     nodes_states.update({nstate.node_id: [nstate]})
             for msg in broadcast_msgs:
+                if msg.__str__() not in handled_msgs:
+                    handled_msgs.append(msg.__str__())
+                else:
+                    continue
+                if hasattr(msg.block.block_id, 'hex'):
+                    msg.block.block_id = msg.block.block_id.hex()
                 if msg.block not in blocks:
                     blocks.append(msg.block)
-                    if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
-                        table.append([msg.block.block_num, nstate.node_view, msg.block.block_index, msg.sender[0:6], 0, 0])
+                    if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
+                            or msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
+                        sender = msg.sender
+                        votes = 0
+                        honest = "h"
+                        if msg.block.payload == "Beware, I am a malicious block":
+                            honest = "x"
+                        if isinstance(msg.block.signer_id, str):
+                            sender = msg.block.signer_id[0:6]
+                        if hasattr(msg.block.signer_id, 'hex'):
+                            sender = msg.block.signer_id.hex()[0:6]
+                        if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
+                            votes = 1
+                        table.append([msg.block.block_num, nstate.node_view, msg.block.block_index,
+                                      msg.block.block_id[0:6], sender, votes, 0, honest])
+                else:
+                    pos = GiskardTester.pos_block_in_table(table, msg.block.block_id)
+                    if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
+                        table[pos][5] += 1  # update votes
+                    if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+                        table[pos][6] += 1  # update votes
 
         print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         file_name3 = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
         f = open(file_name3, 'w')
         f.write(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         f.close()
+
+    @staticmethod
+    def pos_block_in_table(table, block_id):
+        for i in range(2, len(table)):
+            if table[i][3] == block_id[0:6]:
+                return i
+            i += 1
+        return 3
 

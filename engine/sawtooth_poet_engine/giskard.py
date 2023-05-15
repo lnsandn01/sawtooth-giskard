@@ -35,8 +35,15 @@ class Giskard:
         """returns True if the node_id's position in the peers list is equal to the view number % nr of peers"""
         if len(peers) == 1:
             return True
-        position_in_peers = peers.index(node.node_id)
+        if isinstance(node, str):
+            position_in_peers = peers.index(node)
+        else:
+            position_in_peers = peers.index(node.node_id)
         return (position_in_peers + 1) % len(peers) == (view + 1) % len(peers)  # TODO check where view starts 0,1
+
+    @staticmethod
+    def get_block_proposer(view: int, peers: List[str]):
+        return peers[view % len(peers)]
 
     # def is_new_proposer_unique TODO write test for that that checks if indeed all views had unique proposers
     # endregion
@@ -44,16 +51,17 @@ class Giskard:
     # region block methods
     @staticmethod
     def generate_new_block(parent_block: GiskardBlock, block_cache,
-                           block_index) -> GiskardBlock:
+                           block_index, node_id) -> GiskardBlock:
         """waits for a new block to be received from the validator """
         if len(block_cache.pending_blocks) == 0:
             return None
         block_cache.pending_blocks.sort(key=lambda b: b.block_num)
         pending_block = block_cache.pending_blocks.pop(0)
-
+        if node_id == "":
+            node_id = pending_block.signer_id
         new_block = Block(pending_block.block_id,
                           parent_block.block_id,
-                          pending_block.signer_id,
+                          node_id,
                           pending_block.block_num,
                           pending_block.payload,
                           pending_block.summary)
@@ -65,21 +73,22 @@ class Giskard:
         return b.block_index == LAST_BLOCK_INDEX_IDENTIFIER
 
     @staticmethod
-    def generate_last_block(block: GiskardBlock, block_cache) -> GiskardBlock:
+    def generate_last_block(block: GiskardBlock, block_cache, node_id) -> GiskardBlock:
         """TODO still have to figure out if this should be a function or a test """
-        return Giskard.generate_new_block(block, block_cache, 3)
+        return Giskard.generate_new_block(block, block_cache, 3, node_id)
 
     @staticmethod
-    def about_generate_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
+    def about_generate_last_block(block: GiskardBlock, block_cache, block_index, node_id) -> bool:
         """Test if the next block to generate would be the last block """
         return Giskard.generate_last_block(block,
-                                           block_cache).block_height == block.block_height + 1 and Giskard.b_last(
-            Giskard.generate_last_block(block, block_cache))
+                                           block_cache,
+                                           node_id).block_height == block.block_height + 1 and Giskard.b_last(
+            Giskard.generate_last_block(block, block_cache, node_id))
 
     @staticmethod
-    def about_non_last_block(block: GiskardBlock, block_cache, block_index) -> bool:
+    def about_non_last_block(block: GiskardBlock, block_cache, block_index, node_id) -> bool:
         """Test if the next to be generated block will be the last """
-        return not Giskard.b_last(Giskard.generate_new_block(block, block_cache, block_index))
+        return not Giskard.b_last(Giskard.generate_new_block(block, block_cache, block_index, node_id))
 
     @staticmethod
     def parent_of(block: GiskardBlock, block_cache) -> GiskardBlock:
@@ -598,9 +607,9 @@ class Giskard:
                                                previous_msg.block))
             return messages """
 
-        block1 = Giskard.generate_new_block(previous_msg.block, block_cache, 1)
-        block2 = Giskard.generate_new_block(block1, block_cache, 2)
-        block3 = Giskard.generate_last_block(block2, block_cache)  # labeled as last block in view
+        block1 = Giskard.generate_new_block(previous_msg.block, block_cache, 1, state.node_id)
+        block2 = Giskard.generate_new_block(block1, block_cache, 2, state.node_id)
+        block3 = Giskard.generate_last_block(block2, block_cache, state.node_id)  # labeled as last block in view
         block_cache.last_proposed_block = block3
         return [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                                state.node_view,
@@ -619,11 +628,13 @@ class Giskard:
                                previous_msg.block)]  # PrepareQC of the highest block from previous round
 
     @staticmethod
-    def make_PrepareBlock(state: NState, previous_msg: GiskardMessage, block_cache, block_index: int) -> GiskardMessage:
+    def make_PrepareBlock(state: NState, previous_msg: GiskardMessage,
+                          block_cache, block_index: int, block=None) -> GiskardMessage:
         """ CHANGE FROM THE ORIGINAL SPECIFICATION
         sometimes there are no 3 blocks ready for preperation,
         so they are generated and send of one after another"""
-        block = Giskard.generate_new_block(previous_msg.block, block_cache, block_index)
+        if block is None:
+            block = Giskard.generate_new_block(previous_msg.block, block_cache, block_index, state.node_id)
         return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
                               state.node_view,
                               state.node_id,
@@ -667,6 +678,24 @@ class Giskard:
                                            and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK
                                            and not Giskard.prepare_vote_already_sent(state, msg.block),
                                state.counting_messages)))
+
+    @staticmethod
+    def pending_PrepareVote_malicious(state: NState, quorum_msg: GiskardMessage, block_cache) -> List[GiskardMessage]:
+        """ Extra function, as original specification would not maliciously vote for a block,
+        as the original pending_PrepareVote checks for exists_same_height_block """
+        """CHANGE from the verification code
+        here do I check for if a prepare vote has been already sent,
+        this check is nowhere to be found in the coq code"""
+        """ CHANGE from the original specification
+        lambda msg: msg.view == quorum_msg.view removed, why is that there makes no sense,
+        hinders voting for the first block of a new view"""
+        return list(map(lambda prepare_block_msg:
+                        Giskard.make_PrepareVote(state, quorum_msg, prepare_block_msg),
+                        filter(lambda msg: Giskard.parent_ofb(msg.block, quorum_msg.block, block_cache)
+                                           and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK
+                                           and not Giskard.prepare_vote_already_sent(state, msg.block),
+                               state.counting_messages)))
+
 
     @staticmethod
     def make_PrepareQC(state: NState, msg: GiskardMessage) -> GiskardMessage:
@@ -777,7 +806,7 @@ class Giskard:
                                                   block_cache.last_proposed_block,
                                                   Giskard.GenesisBlock_message(state))
                 msg = Giskard.make_PrepareBlock(
-                    state, previous_msg, block_cache, block_cache.blocks_proposed_num)
+                    state, previous_msg, block_cache, block_cache.blocks_proposed_num, None)
                 block_cache.blocks_proposed_num += 1
                 block_cache.last_proposed_block = msg.block
                 lm.append(msg)
@@ -785,7 +814,7 @@ class Giskard:
             return [state_prime, lm]
         previous_msg = Giskard.GenesisBlock_message(state)
         # msg = Giskard.make_PrepareBlock(
-        #    state, previous_msg, block_cache, 0)
+        #    state, previous_msg, block_cache, 0, None)
         lm = Giskard.make_PrepareBlocks(state, previous_msg, block_cache)
         state_prime = Giskard.record_plural(
             state, lm)
@@ -836,6 +865,25 @@ class Giskard:
         return [state_prime, []]
 
     """ PrepareBlock message-related actions """
+
+    # TODO use those two functions
+    @staticmethod
+    def process_PrepareBlock_wrong_proposer(state: NState, msg: GiskardMessage,
+                                       state_prime: NState, lm: List[GiskardMessage], node, peers) -> bool:
+        """ If the proposer is not the right one for the current view - discard the message. """
+        return state_prime == Giskard.discard(state, msg) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
+            and Giskard.view_valid(state, msg) \
+            and not state.timeout \
+            and not Giskard.is_block_proposer(msg.block.signer_id, state.node_view, peers)
+
+    @staticmethod
+    def process_PrepareBlock_wrong_proposer_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        state_prime = Giskard.discard(state, msg)
+        return [state_prime, []]
 
     @staticmethod
     def process_PrepareBlock_duplicate(state: NState, msg: GiskardMessage,
@@ -1290,7 +1338,7 @@ class Giskard:
         return state
 
     """ Malicious node actions """
-
+    # TODO use malicious_ignore
     @staticmethod
     def malicious_ignore(state: NState, msg: GiskardMessage,
                          state_prime: NState, lm: List[GiskardMessage],
@@ -1309,11 +1357,25 @@ class Giskard:
     @staticmethod
     def process_PrepareBlock_malicious_vote(state: NState, msg: GiskardMessage,
                                             state_prime: NState, lm: List[GiskardMessage],
-                                            node, block_cache) -> bool:
+                                            node, block_cache, peers) -> bool:
         """ Malicious nodes can double vote for two blocks of the same height """
+        """ CHANGE from the original specification
+        extra pending_PrepareVote function, as the honest one also checks for exists same height block """
+        if GiskardGenesisBlock() == msg.block:
+            parent_block = GiskardGenesisBlock()
+        else:
+            parent_block = block_cache.block_store.get_parent_block(msg.block)
+        if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
+                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
+                    and msg.block.previous_id == msg.piggyback_block.block_id):
+            parent_block = msg.piggyback_block
+            quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
+        else:
+            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+        lm_prime = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, block_cache)
         return state_prime == Giskard.record_plural(Giskard.process(state, msg),
-                                                    Giskard.pending_PrepareVote(state, msg, block_cache)) \
-            and lm == Giskard.pending_PrepareVote(state, msg, block_cache) \
+                                                    lm_prime) \
+            and lm == lm_prime \
             and Giskard.received(state, msg) \
             and not Giskard.honest_node(node) \
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
@@ -1321,11 +1383,21 @@ class Giskard:
             and Giskard.exists_same_height_block(state, msg.block)
 
     @staticmethod
-    def process_PrepareBlock_malicious_vote_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[
-        GiskardMessage]]:
-        lm = Giskard.pending_PrepareVote(state, msg, block_cache)
-        state_prime = Giskard.record_plural(Giskard.process(state, msg),
-                                            Giskard.pending_PrepareVote(state, msg, block_cache))
+    def process_PrepareBlock_malicious_vote_set(state: NState, msg: GiskardMessage,
+                                                block_cache, peers) -> [NState, List[GiskardMessage]]:
+        if GiskardGenesisBlock() == msg.block:
+            parent_block = GiskardGenesisBlock()
+        else:
+            parent_block = block_cache.block_store.get_parent_block(msg.block)
+        if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
+                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
+                    and msg.block.previous_id == msg.piggyback_block.block_id):
+            parent_block = msg.piggyback_block
+            quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
+        else:
+            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+        lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, block_cache)
+        state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
         return [state_prime, lm]
 
     """ Protocol transition type definitions """
@@ -1366,7 +1438,9 @@ class Giskard:
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
             return Giskard.process_ViewChangeQC_single(state, msg, state_prime, lm, node)
         elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_MALICIOUS_VOTE_TYPE:
-            return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache)
+            return Giskard.process_PrepareBlock_malicious_vote(state, msg, state_prime, lm, node, block_cache, peers)
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_WRONG_PROPOSER_TYPE:
+            return Giskard.process_PrepareBlock_wrong_proposer(state, msg, state_prime, lm, node, peers)
 
     @staticmethod
     def create_mock_block_cache_from_counting_msgs(state: NState, state_prime: NState, peers) -> BlockCacheMock:
@@ -1385,7 +1459,8 @@ class Giskard:
 
         if state_prime is not None:
             for msg in state_prime.out_messages:  # for the blocks that will be proposed during the transition
-                if msg.block not in pending_blocks and msg.block not in blocks:
+                if msg.block not in pending_blocks and msg.block not in blocks \
+                        and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
                     pending_blocks.append(msg.block)
         blocks.sort(key=lambda b: b.block_num)
         pending_blocks.sort(key=lambda b: b.block_num)
@@ -1482,8 +1557,22 @@ class Giskard:
             msg = state.in_messages[0]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
-            lm = Giskard.pending_PrepareVote(state, msg, tmp_block_cache)  # TODO check what i can do maliciously here
+            if GiskardGenesisBlock() == msg.block:
+                parent_block = GiskardGenesisBlock()
+            else:
+                parent_block = tmp_block_cache.block_store.get_parent_block(msg.block)
+            if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
+                    or (msg.block.block_num - 1 == msg.piggyback_block.block_num
+                        and msg.block.previous_id == msg.piggyback_block.block_id):
+                parent_block = msg.piggyback_block
+                quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
+            else:
+                quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+            lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, tmp_block_cache)  # TODO check what i can do maliciously here
             dishonest = True
+        elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_WRONG_PROPOSER_TYPE:
+            msg = state.in_messages[0]
+            lm = []
         return [msg, block_cache, lm, dishonest]
 
     # endregion
@@ -1553,6 +1642,7 @@ class Giskard:
                 Giskard.inc_nr_of_checked_transitions()
                 break
         if not transition_correct:  # check if transition was a timeout
+            #import pdb; pdb.set_trace()
             return gstate_prime == \
                 GState(nodes,
                        {node: Giskard.flip_timeout(nstate)
