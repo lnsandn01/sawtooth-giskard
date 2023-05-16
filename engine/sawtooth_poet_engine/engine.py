@@ -47,7 +47,6 @@ from sawtooth_poet_engine.giskard_node import GiskardNode
 
 LOGGER = logging.getLogger(__name__)
 
-
 class GiskardEngine(Engine):
     """The entrypoint for Giskard
         Keeps state
@@ -90,6 +89,7 @@ class GiskardEngine(Engine):
         self.nstate = None
         self.sent_prep_votes = {}
         self.recv_malicious_block = False
+        self.msg_from_buffer = False
         """ connection to GiskardTester, to send state updates """
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()  # zmq socket to send nstate updates after a transition via tcp
@@ -317,22 +317,10 @@ class GiskardEngine(Engine):
 
     def _handle_buffered_msg(self):
         """ handle buffered msgs after all peers are connected"""
-        handlers_peer = {
-            GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
-            GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
-            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE: self._handle_view_change,
-            GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC: self._handle_prepare_qc,
-            GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC: self._handle_view_change_qc
-        }
-        try:
-            gmsg = self.in_buffer.pop(0)
-            if gmsg.view < self.nstate.node_view:
-                return
-            handle_peer_msg = handlers_peer[gmsg.message_type]
-        except:
-            LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
-        else:
-            handle_peer_msg(gmsg)
+        LOGGER.info("Getting msg from buffer")
+        msg = self.in_buffer.pop(0)
+        self.msg_from_buffer = True
+        self._handle_peer_msgs(msg)
 
     def _try_to_publish(self):
         if self._published or self._validating_blocks:
@@ -415,9 +403,11 @@ class GiskardEngine(Engine):
             LOGGER.info("Discarded msg, old view")
             return
         if len(self.peers) / self.k_peers < self.majority_factor \
-                or len(self.in_buffer) > 0:  # when not all peers are connected yet, collect msgs in a buffer
-            self.in_buffer.append(gmsg)
+                or (len(self.in_buffer) > 0
+                    and not self.msg_from_buffer):  # when not all peers are connected yet, collect msgs in a buffer
+            self.in_buffer.append(msg)
             return
+        self.msg_from_buffer = False
         handlers = {
             GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK: self._handle_prepare_block,
             GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE: self._handle_prepare_vote,
@@ -432,7 +422,11 @@ class GiskardEngine(Engine):
             LOGGER.error('Unknown Messagetype: %s', gmsg.message_type)
         else:
             """ Check if block legit """
-            if gmsg.block.payload == "Beware, I am a malicious block":
+            if gmsg.block.payload == "Beware, I am a malicious block" \
+                    and self.dishonest \
+                    and not self.recv_malicious_block \
+                    and gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
+                LOGGER.info("other node recieved malicious block")
                 self.recv_malicious_block = True
             signer = gmsg.block.signer_id
             if hasattr(gmsg.block.signer_id, 'hex'):
@@ -627,6 +621,9 @@ class GiskardEngine(Engine):
 
     def _handle_prepare_block_malicious(self, msg: GiskardMessage):
         LOGGER.info("Handle PrepareBlockMalicious")
+        if msg.block.payload == "Beware, I am a malicious block":
+            LOGGER.info("Handling a malicious prepareblock")
+            #import pdb; pdb.set_trace()
         """  needed for when this node changes to block proposer, to not propose the init blocks again """
         if not self.all_initial_blocks_proposed and msg.block.block_num >= 2:
             self.all_initial_blocks_proposed = True
@@ -672,8 +669,9 @@ class GiskardEngine(Engine):
         self._send_state_update(lm)
         self._send_out_msgs(lm)
         if malicious_propose is not None:
+            LOGGER.info(malicious_propose)
             self._send_out_msgs([malicious_propose])
-            self._handle_prepare_block(malicious_propose)
+            self._handle_prepare_block_malicious(malicious_propose)
 
     def _malicious_propose(self, msg, parent_block):
         LOGGER.info("trying to be malicious")
@@ -683,8 +681,11 @@ class GiskardEngine(Engine):
         malicious_block.signer_id = "NotTrustworthy"
         if parent_block is None:
             parent_block = msg.piggyback_block
-        previous_adhoc_msg = Giskard.adhoc_ParentBlock_msg(self.nstate,
-                                                           parent_block)
+            previous_adhoc_msg = Giskard.adhoc_ParentBlock_msg(self.nstate,
+                                                               parent_block,
+                                                               self.nstate.node_view - 1)
+        else:
+            previous_adhoc_msg = Giskard.get_quorum_msg_for_block(self.nstate, parent_block, self.peers)
         malicious_propose = Giskard.make_PrepareBlock(self.nstate, previous_adhoc_msg,
                                                       self.node.block_cache, msg.block.block_index,
                                                       malicious_block)

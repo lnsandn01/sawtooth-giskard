@@ -36,7 +36,7 @@ class Giskard:
         if len(peers) == 1:
             return True
         if isinstance(node, str):
-            if node == "NotTrustWorthy":
+            if node == "NotTrustworthy" or node not in peers:
                 return False
             position_in_peers = peers.index(node)
         else:
@@ -352,8 +352,13 @@ class Giskard:
     @staticmethod
     def handled_block_same_height_in_msgs(b, state: NState):
         for msg in state.counting_messages + state.out_messages:
-            if b.block_num == msg.block.block_num:
-                return True
+            try:
+                if b.block_num == msg.block.block_num:
+                    return True
+            except AttributeError as e:
+                print(msg.__str__())
+                traceback.print_exc()
+                print(e)
         return False
 
     @staticmethod
@@ -754,9 +759,9 @@ class Giskard:
                               GiskardGenesisBlock())
 
     @staticmethod
-    def adhoc_ParentBlock_msg(state: NState, parent_block):
+    def adhoc_ParentBlock_msg(state: NState, parent_block, view):
         return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
-                              state.node_view,
+                              view,
                               state.node_id,
                               parent_block,
                               GiskardGenesisBlock())
@@ -916,17 +921,17 @@ class Giskard:
         PrepareBlockmsg is passed in, but we also need the quorum msg
         + pending_PrepareVote requires the msg to be in the counting msg buffer
         + parent_block needs to be checked for prepare_stage not the child block"""
+        quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
         else:
             parent_block = block_cache.block_store.get_parent_block(msg.block)
-        if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
-                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
-                    and msg.block.previous_id == msg.piggyback_block.block_id):
+        if parent_block is not None and Giskard.prepare_stage(state, parent_block, peers):
+            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+        elif msg.block.block_num - 1 == msg.piggyback_block.block_num \
+                and msg.block.previous_id == msg.piggyback_block.block_id:
             parent_block = msg.piggyback_block
             quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-        else:
-            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
         lm_prime = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, block_cache)
         return state_prime == \
             Giskard.record_plural(Giskard.process(state, msg), lm_prime) \
@@ -944,17 +949,17 @@ class Giskard:
         """CHANGE from the original specification
         PrepareBlockmsg is passed in, but we also need the quorum msg
         + pending_PrepareVote requires the msg to be in the counting msg buffer"""
+        quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
         else:
             parent_block = block_cache.block_store.get_parent_block(msg.block)
-        if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
-                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
-                    and msg.block.previous_id == msg.piggyback_block.block_id):
+        if parent_block is not None and Giskard.prepare_stage(state, parent_block, peers):
+            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+        elif msg.block.block_num - 1 == msg.piggyback_block.block_num \
+                and msg.block.previous_id == msg.piggyback_block.block_id:
             parent_block = msg.piggyback_block
             quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-        else:
-            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
         lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
         return [state_prime, lm]
@@ -984,11 +989,18 @@ class Giskard:
                                  state_prime: NState, lm: List[GiskardMessage], node, block_cache, peers) -> bool:
         """ Block is about to reach QC - send PrepareVote messages for child block if it exists and send PrepareQC
         vote_quorum means quorum PrepareVote messages """
+        """ CHANGE from the original specification
+        it only makes sense here to check if there is a same height block
+        for the prepareVote msgs that we will be sending out """
         # TODO is checking in the out_messages enough with exists_same_height_block ?
         lm_prime = []
         if not Giskard.prepare_qc_already_sent(state, msg.block):
             lm_prime.append(Giskard.make_PrepareQC(state, msg))
         lm_prime = lm_prime + Giskard.pending_PrepareVote(state, msg, block_cache)
+        for m in lm_prime:
+            if m.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
+                if Giskard.exists_same_height_block(state, m.block):
+                    return False
         return state_prime == \
             Giskard.process(Giskard.record_plural(
                 state, lm_prime),
@@ -999,7 +1011,6 @@ class Giskard:
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and Giskard.view_valid(state, msg) \
             and not state.timeout \
-            and not Giskard.exists_same_height_block(state, msg.block) \
             and Giskard.vote_quorum_in_view(Giskard.process(state, msg), msg.view, msg.block, peers)
 
     @staticmethod
@@ -1344,17 +1355,17 @@ class Giskard:
         """ Malicious nodes can double vote for two blocks of the same height """
         """ CHANGE from the original specification
         extra pending_PrepareVote function, as the honest one also checks for exists same height block """
+        quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
         else:
             parent_block = block_cache.block_store.get_parent_block(msg.block)
-        if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
-                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
-                    and msg.block.previous_id == msg.piggyback_block.block_id):
+        if parent_block is not None and Giskard.prepare_stage(state, parent_block, peers):
+            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+        elif msg.block.block_num - 1 == msg.piggyback_block.block_num \
+                and msg.block.previous_id == msg.piggyback_block.block_id:
             parent_block = msg.piggyback_block
             quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-        else:
-            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
         lm_prime = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, block_cache)
         return state_prime == Giskard.record_plural(Giskard.process(state, msg),
                                                     lm_prime) \
@@ -1368,17 +1379,17 @@ class Giskard:
     @staticmethod
     def process_PrepareBlock_malicious_vote_set(state: NState, msg: GiskardMessage,
                                                 block_cache, peers) -> [NState, List[GiskardMessage]]:
+        quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
         else:
             parent_block = block_cache.block_store.get_parent_block(msg.block)
-        if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
-                or (msg.block.block_num - 1 == msg.piggyback_block.block_num
-                    and msg.block.previous_id == msg.piggyback_block.block_id):
+        if parent_block is not None and Giskard.prepare_stage(state, parent_block, peers):
+            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+        elif msg.block.block_num - 1 == msg.piggyback_block.block_num \
+                and msg.block.previous_id == msg.piggyback_block.block_id:
             parent_block = msg.piggyback_block
             quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-        else:
-            quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
         lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, block_cache)
         state_prime = Giskard.record_plural(Giskard.process(state, msg), lm)
         return [state_prime, lm]
@@ -1476,17 +1487,17 @@ class Giskard:
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             if not old_version:  # bug in the original Coq code, this is here for testing the impact
                 tmp_block_cache = copy.deepcopy(block_cache)
+                quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
                 if GiskardGenesisBlock() == msg.block:
                     parent_block = GiskardGenesisBlock()
                 else:
                     parent_block = tmp_block_cache.block_store.get_parent_block(msg.block)
-                if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
-                        or (msg.block.block_num - 1 == msg.piggyback_block.block_num
-                            and msg.block.previous_id == msg.piggyback_block.block_id):
+                if parent_block is not None and Giskard.prepare_stage(state, parent_block, peers):
+                    quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+                elif msg.block.block_num - 1 == msg.piggyback_block.block_num \
+                        and msg.block.previous_id == msg.piggyback_block.block_id:
                     parent_block = msg.piggyback_block
                     quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-                else:
-                    quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
                 lm = Giskard.pending_PrepareVote(Giskard.process(state, msg), quorum_msg, tmp_block_cache)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
             msg = state.in_messages[0]
@@ -1497,6 +1508,11 @@ class Giskard:
             if not Giskard.prepare_qc_already_sent(state, msg.block):
                 lm.append(Giskard.make_PrepareQC(state, msg))
             lm = lm + Giskard.pending_PrepareVote(state, msg, tmp_block_cache)
+            """if msg.block.block_num == 3 and msg.block.payload != "Beware, I am a malicious block" \
+                    and state.out_messages != state_prime.out_messages \
+                    and state_prime.out_messages[-1].message_type == 1001 \
+                    and state_prime.out_messages[-1].message_type == 1003:
+                import pdb; pdb.set_trace()"""
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
             msg = state.in_messages[0]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state, msg), state_prime,
@@ -1538,17 +1554,17 @@ class Giskard:
             msg = state.in_messages[0]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
+            quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
             if GiskardGenesisBlock() == msg.block:
                 parent_block = GiskardGenesisBlock()
             else:
                 parent_block = tmp_block_cache.block_store.get_parent_block(msg.block)
-            if (parent_block is not None and not Giskard.prepare_stage(state, parent_block, peers)) \
-                    or (msg.block.block_num - 1 == msg.piggyback_block.block_num
-                        and msg.block.previous_id == msg.piggyback_block.block_id):
+            if parent_block is not None and Giskard.prepare_stage(state, parent_block, peers):
+                quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
+            elif msg.block.block_num - 1 == msg.piggyback_block.block_num \
+                    and msg.block.previous_id == msg.piggyback_block.block_id:
                 parent_block = msg.piggyback_block
                 quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-            else:
-                quorum_msg = Giskard.get_quorum_msg_for_block(state, parent_block, peers)
             lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, tmp_block_cache)  # TODO check what i can do maliciously here
             dishonest = True
         return [msg, block_cache, lm, dishonest]
@@ -1620,7 +1636,7 @@ class Giskard:
                 Giskard.inc_nr_of_checked_transitions()
                 break
         if not transition_correct:  # check if transition was a timeout
-            #import pdb; pdb.set_trace()
+            import pdb; pdb.set_trace()
             return gstate_prime == \
                 GState(nodes,
                        {node: Giskard.flip_timeout(nstate)
