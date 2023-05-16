@@ -35,6 +35,8 @@ class Giskard:
         """returns True if the node_id's position in the peers list is equal to the view number % nr of peers"""
         if len(peers) == 1:
             return True
+        if isinstance(node, int):
+            node = str(node)
         if isinstance(node, str):
             if node == "NotTrustworthy" or node not in peers:
                 return False
@@ -553,7 +555,7 @@ class Giskard:
             return reduce(lambda x, y: x if x.height > y.height else y,
                           [msg.block for msg in state.counting_messages
                            if Giskard.prepare_stage_in_view(state, view, msg.block, peers)],
-                          Giskard.highest_prepare_block_in_view(state, view - 1))
+                          Giskard.highest_prepare_block_in_view(state, view - 1, peers))
 
     @staticmethod
     def highest_prepare_block_message(state: NState, peers) -> GiskardMessage:
@@ -1205,11 +1207,10 @@ class Giskard:
                                       Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
                                       GiskardGenesisBlock()),
                        Giskard.make_ViewChangeQC(state,
-                                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
-                       # send PrepareBlock messages
-                       Giskard.make_PrepareBlocks(Giskard.increment_view(state),
-                                                  Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
-                                                  block_cache)] \
+                                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg)))] + \
+            Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                       Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
+                                       block_cache) \
             and Giskard.received(state, msg) \
             and Giskard.received(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                                                        # This condition is necessary given ViewChange sending behavior
@@ -1238,8 +1239,8 @@ class Giskard:
                              state.node_id,
                              msg_vc.block,
                              GiskardGenesisBlock()),
-              Giskard.make_ViewChangeQC(state, msg_vc),
-              Giskard.make_PrepareBlocks(Giskard.increment_view(state), msg_vc, block_cache)]
+              Giskard.make_ViewChangeQC(state, msg_vc)] + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                                                                     msg_vc, block_cache)
         msg_pr = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                                 # Send ViewChangeQC message before incrementing view to ensure the others can process it
                                 msg.view,
@@ -1332,6 +1333,7 @@ class Giskard:
         return state
 
     """ Malicious node actions """
+
     # TODO use malicious_ignore
     @staticmethod
     def malicious_ignore(state: NState, msg: GiskardMessage,
@@ -1565,7 +1567,8 @@ class Giskard:
                     and msg.block.previous_id == msg.piggyback_block.block_id:
                 parent_block = msg.piggyback_block
                 quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, parent_block)
-            lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg, tmp_block_cache)  # TODO check what i can do maliciously here
+            lm = Giskard.pending_PrepareVote_malicious(Giskard.process(state, msg), quorum_msg,
+                                                       tmp_block_cache)  # TODO check what i can do maliciously here
             dishonest = True
         return [msg, block_cache, lm, dishonest]
 
@@ -1636,7 +1639,7 @@ class Giskard:
                 Giskard.inc_nr_of_checked_transitions()
                 break
         if not transition_correct:  # check if transition was a timeout
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
             return gstate_prime == \
                 GState(nodes,
                        {node: Giskard.flip_timeout(nstate)
@@ -1752,7 +1755,7 @@ class Giskard:
                     view = min(gstate[node1][-1].node_view, gstate[node2][-1].node_view)
                     for v, block1, block2 in itertools.product(range(0, view + 1), blocks1,
                                                                blocks2):  # Todo check if views start with 0 or 1
-                        #if block1.block_num == 3 and block2.block_num == 3:
+                        # if block1.block_num == 3 and block2.block_num == 3:
                         #    import pdb;
                         #    pdb.set_trace()
                         if node1 in peers \

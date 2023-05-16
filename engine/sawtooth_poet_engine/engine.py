@@ -47,6 +47,7 @@ from sawtooth_poet_engine.giskard_node import GiskardNode
 
 LOGGER = logging.getLogger(__name__)
 
+
 class GiskardEngine(Engine):
     """The entrypoint for Giskard
         Keeps state
@@ -84,12 +85,15 @@ class GiskardEngine(Engine):
         self.new_network = False  # also used for switching between initially proposing the genesis block or not
         self.prepareQC_last_view = None  # the highest prepareQC of the last view, used as the parent block for the view
         self.hanging_prepareQC_new_proposer = False  # used to postpone the generation of new blocks, as there are not always 3 blocks available
+        self.hanging_ViewChange_new_proposer = False
         self.in_buffer = []  # used for the case that this node is not fully connected yet, but other nodes are and already sent messages
         self.node = None
         self.nstate = None
         self.sent_prep_votes = {}
         self.recv_malicious_block = False
         self.msg_from_buffer = False
+        self.start_time_view = 0
+        self.timeout_after = 100
         """ connection to GiskardTester, to send state updates """
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()  # zmq socket to send nstate updates after a transition via tcp
@@ -208,6 +212,7 @@ class GiskardEngine(Engine):
          so it starts receiving messages"""
         if self.started:
             return
+        self.started = True
         self._service = service
 
         self._oracle = PoetOracle(
@@ -231,6 +236,7 @@ class GiskardEngine(Engine):
             self.all_initial_blocks_proposed = True
         # send empty state to the GiskardTester
         self._send_state_update([])
+        self.start_time_view = time.time()
 
         # 1. Wait for an incoming message.
         # 2. Check for exit.
@@ -253,6 +259,12 @@ class GiskardEngine(Engine):
         }
 
         while True:
+            if self.nstate.node_view >= 1:
+                self.timeout_after = 5
+            #if self.nstate.node_view == 2:
+            #    self.timeout_after = 100
+            if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
+                self._trigger_view_change()
             """ Do the initial block proposal if necessary """
             if not self.all_initial_blocks_proposed and self.new_network \
                     and len(self.peers) / self.k_peers >= self.majority_factor \
@@ -351,7 +363,7 @@ class GiskardEngine(Engine):
         if not self.node.block_cache.pending_blocks_same_height_exists(block.block_num) \
                 and block not in self.node.block_cache.block_store.uncommitted_blocks \
                 and not Giskard.handled_block_same_height_in_msgs(block, self.nstate):  # \
-              # and not self.node.block_cache.block_store.same_height_block_in_storage(block): TODO add back in, as soon as the net uses giskard
+            # and not self.node.block_cache.block_store.same_height_block_in_storage(block): TODO add back in, as soon as the net uses giskard
             self.node.block_cache.pending_blocks.append(block)
         else:
             LOGGER.info("block_num: " + str(block.block_num) + " has already been handled")
@@ -359,8 +371,13 @@ class GiskardEngine(Engine):
         if self.hanging_prepareQC_new_proposer \
                 and len(self.node.block_cache.pending_blocks) >= 3:
             self.hanging_prepareQC_new_proposer = False
-            LOGGER.info("propose new blocks from handle_new_block")
+            LOGGER.info("propose new blocks from handle_new_block prepare qc new proposer")
             self._prepareQC_last_block_new_proposer(self.nstate.in_messages[0])
+        if self.hanging_ViewChange_new_proposer \
+                and len(self.node.block_cache.pending_blocks) >= 3:
+            self.hanging_ViewChange_new_proposer = False
+            LOGGER.info("propose new blocks from handle_new_block view change qc new proposer")
+            self._view_changeQC_new_proposer(self.nstate.in_messages[0])
 
     def _handle_valid_block(self, block_id):
         self._validating_blocks.discard(block_id)
@@ -402,10 +419,16 @@ class GiskardEngine(Engine):
         if gmsg.view < self.nstate.node_view:
             LOGGER.info("Discarded msg, old view")
             return
+        """ after timeout, don't handle any other msg than viewchange msgs """
+        if self.nstate.timeout and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
+            LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
+            return
         if len(self.peers) / self.k_peers < self.majority_factor \
                 or (len(self.in_buffer) > 0
                     and not self.msg_from_buffer):  # when not all peers are connected yet, collect msgs in a buffer
             self.in_buffer.append(msg)
+            LOGGER.info("Added msg to in_buffer")
             return
         self.msg_from_buffer = False
         handlers = {
@@ -432,7 +455,9 @@ class GiskardEngine(Engine):
             if hasattr(gmsg.block.signer_id, 'hex'):
                 signer = gmsg.block.signer_id.hex()
             if not self.node.dishonest \
-                    and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers):
+                    and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers) \
+                    and not gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE:
+                LOGGER.info("Discarded msg, block proposer not the proposer for this view")
                 return
             if self.node.dishonest and gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
                 self._handle_prepare_block_malicious(gmsg)
@@ -495,7 +520,7 @@ class GiskardEngine(Engine):
         if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
             self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
-        self.node.block_cache.remove_pending_block(msg.block.block_id)
+        #self.node.block_cache.remove_pending_block(msg.block.block_id)
         if msg.block == GiskardGenesisBlock():
             parent_block = GiskardGenesisBlock()
         else:
@@ -514,7 +539,7 @@ class GiskardEngine(Engine):
     def _handle_prepare_vote(self, msg):
         LOGGER.info("Handle PrepareVote")
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
-        self.node.block_cache.remove_pending_block(msg.block.block_id)
+        #self.node.block_cache.remove_pending_block(msg.block.block_id)
 
         self.nstate = Giskard.add(self.nstate, msg)
         self._send_state_update([])
@@ -540,11 +565,6 @@ class GiskardEngine(Engine):
         self._send_state_update(lm)
         self._send_out_msgs(lm)
 
-    def _handle_view_change(self, msg):
-        LOGGER.info("Handle ViewChange")
-        self.nstate = Giskard.add(self.nstate, msg)
-        self._send_state_update([])
-
     def _handle_prepare_qc(self, msg):
         LOGGER.info("Handle PrepareQC")
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
@@ -563,6 +583,7 @@ class GiskardEngine(Engine):
 
         """ 3 blocks reached qc -> view change; propose blocks if you are the next proposer """
         if len(self.node.block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER:
+            self.start_time_view = time.time()  # start new view time directly here
             if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("last block qc new proposer node: " + self._validator_connect[-1])
                 """ Only propose blocks when you have 3 ready in the pending block cache """
@@ -610,6 +631,43 @@ class GiskardEngine(Engine):
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
                 self._handle_prepare_block(msg)
 
+    def _trigger_view_change(self):
+        LOGGER.info("Trigger View Change")
+        self.nstate = Giskard.flip_timeout(self.nstate)
+        view_change_msg = Giskard.make_ViewChange(self.nstate, self.peers)
+        self._send_out_msgs([view_change_msg])
+
+    def _handle_view_change(self, msg):
+        LOGGER.info("Handle ViewChange")
+        self.nstate = Giskard.add(self.nstate, msg)
+        self._send_state_update([])
+        lm = []
+        if Giskard.view_change_quorum_in_view(Giskard.process(self.nstate, msg),
+                                              # ViewChange messages can be processed during timeout.It is important that the parameter here is (process state msg) and not simply state
+                                              self.nstate.node_view,
+                                              self.peers):
+            LOGGER.info("ViewChange quorum reached")
+            if Giskard.is_block_proposer(self.nstate.node_id, self.nstate.node_view + 1, self.peers):
+                LOGGER.info("ViewChange new proposer")
+                if len(self.node.block_cache.pending_blocks) >= 3:
+                    LOGGER.info("propose new blocks from view change quorum new proposer")
+                    self._view_changeQC_new_proposer(msg)
+                    return
+                else:
+                    """ postpone until 3 new blocks are received """
+                    self.hanging_ViewChange_new_proposer = True
+                    return
+            else:
+                LOGGER.info("ViewChange not the new proposer, wait for ViewChangeQC message")
+        else:
+            LOGGER.info("ViewChange pre quorum")
+            self.nstate, lm = Giskard.process_ViewChange_pre_quorum_set(self.nstate, msg)
+        self._send_state_update(lm)
+        self._send_out_msgs(lm)
+        for msg in lm:
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
+                self._handle_prepare_block(msg)
+
     def _handle_view_change_qc(self, msg):
         """ Timeout occured, which led to view change msgs being exchanged,
         which reached a quorum -> increment view, next proposer, propose blocks """
@@ -619,11 +677,26 @@ class GiskardEngine(Engine):
         self.nstate, lm = Giskard.process_ViewChangeQC_single_set(self.nstate, msg)
         self._send_state_update(lm)
 
+    def _view_changeQC_new_proposer(self, msg):
+        """ Call this function when you are the proposer of the next view,
+        and you have received 3 new blocks to be proposed """
+        self.node.block_cache.blocks_proposed_num = 0  # reset proposed blocks count
+        self.nstate, lm = \
+            Giskard.process_ViewChange_quorum_new_proposer_set(
+                self.nstate, msg, self.node.block_cache)
+        self.node.block_cache.blocks_proposed_num = 3
+        self.node.block_cache.blocks_reached_qc_current_view = []  # reset those as view change happened
+        self._send_state_update(lm)
+        self._send_out_msgs(lm)
+        for msg in lm:
+            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
+                self._handle_prepare_block(msg)
+
     def _handle_prepare_block_malicious(self, msg: GiskardMessage):
         LOGGER.info("Handle PrepareBlockMalicious")
         if msg.block.payload == "Beware, I am a malicious block":
             LOGGER.info("Handling a malicious prepareblock")
-            #import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
         """  needed for when this node changes to block proposer, to not propose the init blocks again """
         if not self.all_initial_blocks_proposed and msg.block.block_num >= 2:
             self.all_initial_blocks_proposed = True
@@ -662,7 +735,8 @@ class GiskardEngine(Engine):
             if msg.block.payload != "Beware, I am a malicious block" \
                     and not self.recv_malicious_block \
                     and (msg.block.block_num == 3) \
-                    and not Giskard.is_block_proposer(self.node, self.nstate.node_view, self.peers):  # Only propose one malicious block
+                    and not Giskard.is_block_proposer(self.node, self.nstate.node_view,
+                                                      self.peers):  # Only propose one malicious block
                 malicious_propose = self._malicious_propose(msg, parent_block)
         else:
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
@@ -718,8 +792,7 @@ class GiskardEngine(Engine):
                     self.sent_prep_votes[msg.block.block_id.hex()] += 1
         self._write_prepvotes() """
         file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/prep_votes_node" \
-            + self._validator_connect[-1] + ".txt"
+                    + self._validator_connect[-1] + ".txt"
         f = open(file_name, 'w')
         f.write(self.sent_prep_votes.__str__())
         f.close()
-
