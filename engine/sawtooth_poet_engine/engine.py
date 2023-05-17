@@ -94,7 +94,7 @@ class GiskardEngine(Engine):
         self.recv_malicious_block = False
         self.msg_from_buffer = False
         self.start_time_view = 0
-        self.timeout_after = 200
+        self.timeout_after = 20000
         self.accept_msgs_after_timeout = False
         """ connection to GiskardTester, to send state updates """
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))

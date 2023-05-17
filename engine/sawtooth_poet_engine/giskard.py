@@ -520,10 +520,8 @@ class Giskard:
     @staticmethod
     def processed_ViewChange_in_view(state: NState, view: int) -> List[GiskardMessage]:
         """ Quorum ViewChange messages in some view """
-        """ CHANGE from the original specification
-        + out_messages, needed to include own msg in the quorum check"""
         return list(filter(lambda msg: msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE
-                                       and msg.view == view, state.counting_messages + state.out_messages))
+                                       and msg.view == view, state.counting_messages))
 
     @staticmethod
     def view_change_quorum_in_view(state: NState, view: int, peers) -> bool:
@@ -1159,7 +1157,7 @@ class Giskard:
 
     @staticmethod
     def highest_message_in_list(node, message_type, lm: List[GiskardMessage]) -> GiskardMessage:
-        return functools.reduce(lambda x, y: x if x == Giskard.higher_message(x, y) else y,
+        return functools.reduce(lambda x, y: x if x.block.block_num > y.block.block_num else y,
                                 lm, GiskardMessage(message_type, 0, node, GiskardGenesisBlock(), GiskardGenesisBlock()))
 
     @staticmethod
@@ -1187,51 +1185,41 @@ class Giskard:
                                                state_prime: NState, lm: List[GiskardMessage],
                                                node, block_cache, peers) -> bool:
         """ For better understandability look at process_ViewChange_quorum_new_proposer_set """
+        """ CHANGE from the original specification TODO insert back in but with getting the actual msg
+        and Giskard.received(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
+                                                   # This condition is necessary given ViewChange sending behavior
+                                                   msg.view,
+                                                   msg.sender,
+                                                   Giskard.highest_ViewChange_message(
+                                                       Giskard.process(state, msg)).block,
+                                                   GiskardGenesisBlock())) """
+        # The input has to include the current ViewChange message, just in
+        # case that is the one which contains the highest block
+        msg_qc = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,  # PrepareQC of the highest block
+                                   state.node_view,
+                                   state.node_id,
+                                   Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
+                                   GiskardGenesisBlock())
+        lm_prime = [msg_qc,
+                    # ViewChangeQC containing the highest block
+                    Giskard.make_ViewChangeQC(state,
+                                              Giskard.highest_ViewChange_message(Giskard.process(state, msg)))] \
+                   + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                                Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
+                                                block_cache)
+        import pdb; pdb.set_trace()
         # Record new blocks after incrementing view
         return state_prime == \
             Giskard.record_plural(
                 Giskard.increment_view(
                     Giskard.process(
-                        Giskard.process(state, msg),
-                        GiskardMessage(
-                            GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                            msg.view,
-                            msg.sender,
-                            Giskard.highest_ViewChange_message(
-                                Giskard.process(state, msg)).block,
-                            GiskardGenesisBlock()))),
-                # The input has to include the current ViewChange message, just in
-                #        case that is the one which contains the highest block
-                [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,  # PrepareQC of the highest block
-                                state.node_view,
-                                state.node_id,
-                                Giskard.highest_ViewChange_message(Giskard.process(state, msg)), GiskardGenesisBlock()),
-                 # ViewChangeQC containing the highest block
-                 Giskard.make_ViewChangeQC(state,
-                                           Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
-                 # New block proposals
-                 Giskard.make_PrepareBlocks(Giskard.increment_view(state),
-                                            Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
-                                            block_cache)]) \
-            and lm == [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                                      # Send ViewChangeQC message before incrementing view to ensure the others can process it
-                                      state.node_view,
-                                      state.node_id,
-                                      Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
-                                      GiskardGenesisBlock()),
-                       Giskard.make_ViewChangeQC(state,
-                                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg)))] + \
-            Giskard.make_PrepareBlocks(Giskard.increment_view(state),
-                                       Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
-                                       block_cache) \
+                        Giskard.add(
+                            Giskard.process(state, msg),
+                            msg_qc),
+                        msg_qc)),
+                lm_prime) \
+            and lm == lm_prime \
             and Giskard.received(state, msg) \
-            and Giskard.received(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                                                       # This condition is necessary given ViewChange sending behavior
-                                                       msg.view,
-                                                       msg.sender,
-                                                       Giskard.highest_ViewChange_message(
-                                                           Giskard.process(state, msg)).block,
-                                                       GiskardGenesisBlock())) \
             and Giskard.honest_node(node) \
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
             and Giskard.view_valid(state, msg) \
@@ -1554,17 +1542,17 @@ class Giskard:
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(state, state_prime, peers)
             tmp_block_cache = copy.deepcopy(block_cache)
             lm = [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                                 # Send ViewChangeQC message before incrementing view to ensure the others can process it
+                                 # Send ViewChangeQC message
+                                 # before incrementing view to ensure the others can process it
                                  state.node_view,
                                  state.node_id,
                                  Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
                                  GiskardGenesisBlock()),
                   Giskard.make_ViewChangeQC(state,
-                                            Giskard.highest_ViewChange_message(Giskard.process(state, msg))),
-                  # send PrepareBlock messages
-                  Giskard.make_PrepareBlocks(Giskard.increment_view(state),
-                                             Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
-                                             tmp_block_cache)]
+                                            Giskard.highest_ViewChange_message(Giskard.process(state, msg)))] \
+                 + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                              Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
+                                              tmp_block_cache)  # send PrepareBlock messages
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
             msg = state.in_messages[0]
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
@@ -1656,7 +1644,8 @@ class Giskard:
                 Giskard.inc_nr_of_checked_transitions()
                 break
         if not transition_correct:  # check if transition was a timeout
-            # import pdb; pdb.set_trace()
+            import pdb;
+            pdb.set_trace()
             return nstate_prime == Giskard.flip_timeout(nstate)
         else:
             return True
