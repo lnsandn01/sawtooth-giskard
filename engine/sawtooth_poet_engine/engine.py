@@ -463,7 +463,8 @@ class GiskardEngine(Engine):
                 signer = gmsg.block.signer_id.hex()
             if not self.node.dishonest \
                     and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers) \
-                    and not gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE:
+                    and not gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
+                    and not gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
                 LOGGER.info("Discarded msg, block proposer not the proposer for this view")
                 return
             if self.node.dishonest and gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
