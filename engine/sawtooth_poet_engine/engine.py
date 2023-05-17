@@ -46,6 +46,7 @@ from sawtooth_poet_engine.pending import PendingForks
 from sawtooth_poet_engine.giskard_node import GiskardNode
 
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.INFO)
 
 
 class GiskardEngine(Engine):
@@ -93,7 +94,8 @@ class GiskardEngine(Engine):
         self.recv_malicious_block = False
         self.msg_from_buffer = False
         self.start_time_view = 0
-        self.timeout_after = 100
+        self.timeout_after = 200
+        self.accept_msgs_after_timeout = False
         """ connection to GiskardTester, to send state updates """
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()  # zmq socket to send nstate updates after a transition via tcp
@@ -259,8 +261,10 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            if self.nstate.node_view >= 1:
+            if self.nstate.node_view == 1 or self.hanging_prepareQC_new_proposer:  # hanging_prepareqc, as new proposer should also timeout the same as other nodes, even though it hasn't reached the next view yet
                 self.timeout_after = 5
+            else:
+                self.timeout_after = 200
             #if self.nstate.node_view == 2:
             #    self.timeout_after = 100
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
@@ -411,17 +415,20 @@ class GiskardEngine(Engine):
     def _handle_peer_msgs(self, msg):
         LOGGER.info("Peer msg: " + str(msg[0].content))
 
-        if self.hanging_prepareQC_new_proposer:
+        gmsg = jsonpickle.decode(msg[0].content, None, None, False, True, False, GiskardMessage)
+        if self.hanging_prepareQC_new_proposer \
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
+            LOGGER.info("Discarded msg: hanging prepareqc")
             return  # view change all further messages of this view can be discarded
             # TODO handle recovery viewchange msgs if timeout
-
-        gmsg = jsonpickle.decode(msg[0].content, None, None, False, True, False, GiskardMessage)
         if gmsg.view < self.nstate.node_view:
             LOGGER.info("Discarded msg, old view")
             return
         """ after timeout, don't handle any other msg than viewchange msgs """
         if self.nstate.timeout and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
-                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC \
+                and not self.accept_msgs_after_timeout:
             LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
             return
         if len(self.peers) / self.k_peers < self.majority_factor \
@@ -633,9 +640,18 @@ class GiskardEngine(Engine):
 
     def _trigger_view_change(self):
         LOGGER.info("Trigger View Change")
+        self.accept_msgs_after_timeout = False
         self.nstate = Giskard.flip_timeout(self.nstate)
+        self._send_state_update([])
+        """ hanging proposers are still in the old view,
+        as the state update is done in one step when there are 3 pending blocks
+        update state here without proposing blocks """
+        if self.hanging_prepareQC_new_proposer:
+            self.nstate.node_view += 1  # TODO check if this makes transitions not work
+            self.hanging_prepareQC_new_proposer = False
         view_change_msg = Giskard.make_ViewChange(self.nstate, self.peers)
         self._send_out_msgs([view_change_msg])
+        self._handle_view_change(view_change_msg)
 
     def _handle_view_change(self, msg):
         LOGGER.info("Handle ViewChange")
@@ -647,6 +663,7 @@ class GiskardEngine(Engine):
                                               self.nstate.node_view,
                                               self.peers):
             LOGGER.info("ViewChange quorum reached")
+            self.accept_msgs_after_timeout = True
             if Giskard.is_block_proposer(self.nstate.node_id, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("ViewChange new proposer")
                 if len(self.node.block_cache.pending_blocks) >= 3:
@@ -658,7 +675,8 @@ class GiskardEngine(Engine):
                     self.hanging_ViewChange_new_proposer = True
                     return
             else:
-                LOGGER.info("ViewChange not the new proposer, wait for ViewChangeQC message")
+                LOGGER.info("ViewChange not the new proposer for view: " + str(self.nstate.node_view + 1) \
+                            + " , wait for ViewChangeQC message")
         else:
             LOGGER.info("ViewChange pre quorum")
             self.nstate, lm = Giskard.process_ViewChange_pre_quorum_set(self.nstate, msg)
@@ -681,6 +699,7 @@ class GiskardEngine(Engine):
         """ Call this function when you are the proposer of the next view,
         and you have received 3 new blocks to be proposed """
         self.node.block_cache.blocks_proposed_num = 0  # reset proposed blocks count
+        #import pdb; pdb.set_trace()
         self.nstate, lm = \
             Giskard.process_ViewChange_quorum_new_proposer_set(
                 self.nstate, msg, self.node.block_cache)
@@ -696,7 +715,6 @@ class GiskardEngine(Engine):
         LOGGER.info("Handle PrepareBlockMalicious")
         if msg.block.payload == "Beware, I am a malicious block":
             LOGGER.info("Handling a malicious prepareblock")
-            # import pdb; pdb.set_trace()
         """  needed for when this node changes to block proposer, to not propose the init blocks again """
         if not self.all_initial_blocks_proposed and msg.block.block_num >= 2:
             self.all_initial_blocks_proposed = True

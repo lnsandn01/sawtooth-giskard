@@ -43,8 +43,8 @@ class TestGiskardNetwork(unittest.TestCase):
             'processors': NodeController.intkey_config_registry,
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
-            'rounds': 1,
-            'start_nodes_per_round': 4,
+            'rounds': 3,
+            'start_nodes_per_round': 2,
             'stop_nodes_per_round': 0,
             'batches': 8,
             'time_between_batches': 0,
@@ -71,10 +71,10 @@ class TestGiskardNetwork(unittest.TestCase):
             'processors': NodeController.intkey_config_registry,
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.all_serial,
-            'rounds': 1,
+            'rounds': 3,
             'start_nodes_per_round': 3,
             'stop_nodes_per_round': 0,
-            'batches': 5,
+            'batches': 8,
             'time_between_batches': 1,
         })
 
@@ -117,9 +117,9 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nsent batches alternating\n\n")
             self.send_txns_all_at_once(batches, time_between_batches)
             LOGGER.info("\n\nsent batches\n\n")
-            #self.assert_consensus()
+            self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
-        #self.stop_nodes(stop_nodes_per_round)
+        self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")
         giskard_tester.exit = True
         """ Check all state transitions, to see if the nodes transitioned as the protocol dictates """

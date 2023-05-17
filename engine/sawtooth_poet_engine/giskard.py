@@ -520,8 +520,10 @@ class Giskard:
     @staticmethod
     def processed_ViewChange_in_view(state: NState, view: int) -> List[GiskardMessage]:
         """ Quorum ViewChange messages in some view """
+        """ CHANGE from the original specification
+        + out_messages, needed to include own msg in the quorum check"""
         return list(filter(lambda msg: msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE
-                                       and msg.view == view, state.counting_messages))
+                                       and msg.view == view, state.counting_messages + state.out_messages))
 
     @staticmethod
     def view_change_quorum_in_view(state: NState, view: int, peers) -> bool:
@@ -549,13 +551,24 @@ class Giskard:
         """ Because not every view is guaranteed to have a block in prepare stage,
         the definition of <<highest_prepare_block_in_view>> must be able to recursively
         search for the highest prepare block in all past views """
-        if view == 0:
+        if view == -1:
             return GiskardGenesisBlock()
         else:
-            return reduce(lambda x, y: x if x.height > y.height else y,
-                          [msg.block for msg in state.counting_messages
+            return reduce(lambda x, y: x if x.block_num > y.block_num else y,
+                          [msg.block for msg in state.counting_messages + state.out_messages
                            if Giskard.prepare_stage_in_view(state, view, msg.block, peers)],
                           Giskard.highest_prepare_block_in_view(state, view - 1, peers))
+
+    @staticmethod
+    def test_reduce(view):
+        lm = range(0, view)
+        if view == -1:
+            return 0
+        else:
+            return reduce(lambda x, y: x if x > y else y,
+                          [valuelm for valuelm in lm
+                           if (valuelm % 2) == 0],
+                          Giskard.test_reduce(view - 1))
 
     @staticmethod
     def highest_prepare_block_message(state: NState, peers) -> GiskardMessage:
@@ -1239,19 +1252,23 @@ class Giskard:
                              state.node_id,
                              msg_vc.block,
                              GiskardGenesisBlock()),
-              Giskard.make_ViewChangeQC(state, msg_vc)] + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
-                                                                                     msg_vc, block_cache)
+              Giskard.make_ViewChangeQC(state, msg_vc)] \
+             + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
+                                          msg_vc, block_cache)
         msg_pr = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                                 # Send ViewChangeQC message before incrementing view to ensure the others can process it
                                 msg.view,
                                 msg.sender,
                                 msg_vc.block,
                                 GiskardGenesisBlock())
-        state_prime_prime = NState(None, state_prime.node_view + 1,
+        state_prime.counting_messages.append(msg_pr)
+        state_prime.out_messages = state_prime.out_messages + lm
+        state_prime_prime = NState(None,
+                                   state_prime.node_view + 1,
                                    state_prime.node_id,
                                    [],
-                                   state_prime.counting_messages.append(msg_pr),
-                                   state_prime.out_messages.append(lm),
+                                   state_prime.counting_messages,
+                                   state_prime.out_messages,
                                    False)
         return [state_prime_prime, lm]
 
@@ -1640,11 +1657,7 @@ class Giskard:
                 break
         if not transition_correct:  # check if transition was a timeout
             # import pdb; pdb.set_trace()
-            return gstate_prime == \
-                GState(nodes,
-                       {node: Giskard.flip_timeout(nstate)
-                       if Giskard.is_member(node, nodes) else gstate.gstate[node] for node in gstate.gstate},
-                       gstate.broadcast_msgs)
+            return nstate_prime == Giskard.flip_timeout(nstate)
         else:
             return True
 
