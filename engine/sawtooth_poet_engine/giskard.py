@@ -261,23 +261,19 @@ class Giskard:
     def increment_view(state: NState) -> NState:
         """ View change happened,
         increments the view number, resets in_messages buffer and timeout variable. """
-        return NState(None,
-                      state.node_view + 1,
-                      state.node_id,
-                      [],
-                      state.counting_messages,
-                      state.out_messages,
-                      False)
+        state_prime = copy.deepcopy(state)
+        state_prime.node_view += 1
+        state_prime.in_messages = []
+        state_prime.timeout = False
+        return state_prime
 
     @staticmethod
     def flip_timeout(state: NState) -> NState:
         """ Sets the timeout variable to True """
-        return NState(None, state.node_view,
-                      state.node_id,
-                      state.in_messages,
-                      state.counting_messages,
-                      state.out_messages,
-                      True)
+        state_prime = copy.deepcopy(state)
+        state_prime.timeout = True
+        return state_prime
+
 
     # endregion
 
@@ -1200,6 +1196,12 @@ class Giskard:
                                    state.node_id,
                                    Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
                                    GiskardGenesisBlock())
+        msg_pr = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
+                                # Send ViewChangeQC message before incrementing view to ensure the others can process it
+                                msg.view,
+                                msg.sender,
+                                msg_qc.block,
+                                GiskardGenesisBlock())
         lm_prime = [msg_qc,
                     # ViewChangeQC containing the highest block
                     Giskard.make_ViewChangeQC(state,
@@ -1207,7 +1209,6 @@ class Giskard:
                    + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
                                                 Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
                                                 block_cache)
-        import pdb; pdb.set_trace()
         # Record new blocks after incrementing view
         return state_prime == \
             Giskard.record_plural(
@@ -1215,8 +1216,8 @@ class Giskard:
                     Giskard.process(
                         Giskard.add(
                             Giskard.process(state, msg),
-                            msg_qc),
-                        msg_qc)),
+                            msg_pr),
+                        msg_pr)),
                 lm_prime) \
             and lm == lm_prime \
             and Giskard.received(state, msg) \
@@ -1261,6 +1262,32 @@ class Giskard:
         return [state_prime_prime, lm]
 
     @staticmethod
+    def process_ViewChange_quorum_not_new_proposer(state: NState, msg: GiskardMessage,
+                                      state_prime: NState, lm: List[GiskardMessage],
+                                      node, peers) -> bool:
+        """ Process ViewChange quorum reached,
+        process and wait for receiving a ViewChangeQC msg from the next proposer """
+        """ CHANGE from the original specification
+        doesn't exist there, probably forgotten """
+        return state_prime == Giskard.process(state, msg) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
+            and Giskard.honest_node(node) \
+            and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
+            and Giskard.view_valid(state, msg) \
+            and Giskard.view_change_quorum_in_view(
+                Giskard.process(state, msg), state.node_view, peers) \
+            and not Giskard.is_block_proposer(node, state.node_view + 1, peers)
+
+    @staticmethod
+    def process_ViewChange_quorum_not_new_proposer_set(state: NState,
+                                          msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+        """ CHANGE from the original specification
+        doesn't exist there, probably forgotten """
+        state_prime = Giskard.process(state, msg)
+        return [state_prime, []]
+
+    @staticmethod
     def process_ViewChange_pre_quorum(state: NState, msg: GiskardMessage,
                                       state_prime: NState, lm: List[GiskardMessage],
                                       node, peers) -> bool:
@@ -1289,23 +1316,18 @@ class Giskard:
         """ Process highest PrepareQC message, process ViewChangeQC, then increment view.
         Critically, this is where we enforce that the PrepareQC of the max height block
         is processed before view change occurs, otherwise nodes can get stuck during view change. """
-        return state_prime == \
-            Giskard.increment_view(
-                Giskard.process(
-                    Giskard.process(state,
-                                    GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                                                   state.node_view,
-                                                   msg.sender,
-                                                   msg.block,
-                                                   GiskardGenesisBlock())),
-                    msg)) \
-            and lm == [] \
-            and Giskard.received(state, msg) \
-            and Giskard.received(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
+        """ CHANGE from the original specification
+        removed and Giskard.received(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                                                        state.node_view,
                                                        msg.sender,
                                                        msg.block,
                                                        GiskardGenesisBlock())) \
+        could be that not received yet and can't know the sender beforehand """
+        return state_prime == \
+            Giskard.increment_view(
+                Giskard.process(state, msg)) \
+            and lm == [] \
+            and Giskard.received(state, msg) \
             and Giskard.honest_node(node) \
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC \
             and Giskard.view_valid(state, msg)
@@ -1313,29 +1335,8 @@ class Giskard:
     @staticmethod
     def process_ViewChangeQC_single_set(state: NState,
                                         msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
-        state_prime = Giskard.increment_view(
-            Giskard.process(
-                Giskard.process(
-                    Giskard.add(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                                                      state.node_view,
-                                                      msg.sender,
-                                                      msg.block,
-                                                      GiskardGenesisBlock())),
-                    GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
-                                   state.node_view,
-                                   msg.sender,
-                                   msg.block,
-                                   GiskardGenesisBlock())), msg))
+        state_prime = Giskard.increment_view(Giskard.process(state, msg))
         return [state_prime, []]
-
-    """ Timeout """
-
-    @staticmethod
-    def flip_timeout(state: NState) -> NState:
-        """ When timeout is triggered, send ViewChange with the highest prepare stage block.
-        Given the new definition of prepare stage, this block might not be from the current view at all. """
-        state.timeout = True
-        return state
 
     """ Malicious node actions """
 
@@ -1434,6 +1435,8 @@ class Giskard:
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NEW_PROPOSER_TYPE:
             return Giskard.process_ViewChange_quorum_new_proposer(state, msg, state_prime, lm, node, block_cache,
                                                                   peers)
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NOT_NEW_PROPOSER_TYPE:
+            return Giskard.process_ViewChange_quorum_not_new_proposer(state, msg, state_prime, lm, node, peers)
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
             return Giskard.process_ViewChange_pre_quorum(state, msg, state_prime, lm, node, peers)
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
@@ -1515,11 +1518,6 @@ class Giskard:
             if not Giskard.prepare_qc_already_sent(state, msg.block):
                 lm.append(Giskard.make_PrepareQC(state, msg))
             lm = lm + Giskard.pending_PrepareVote(state, msg, tmp_block_cache)
-            """if msg.block.block_num == 3 and msg.block.payload != "Beware, I am a malicious block" \
-                    and state.out_messages != state_prime.out_messages \
-                    and state_prime.out_messages[-1].message_type == 1001 \
-                    and state_prime.out_messages[-1].message_type == 1003:
-                import pdb; pdb.set_trace()"""
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_WAIT_TYPE:
             msg = state.in_messages[0]
             block_cache = Giskard.create_mock_block_cache_from_counting_msgs(Giskard.process(state, msg), state_prime,
@@ -1553,6 +1551,8 @@ class Giskard:
                  + Giskard.make_PrepareBlocks(Giskard.increment_view(state),
                                               Giskard.highest_ViewChange_message(Giskard.process(state, msg)),
                                               tmp_block_cache)  # send PrepareBlock messages
+        elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NOT_NEW_PROPOSER_TYPE:
+            msg = state.in_messages[0]
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
             msg = state.in_messages[0]
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
@@ -1618,7 +1618,7 @@ class Giskard:
             """ The in_message buffer is not allowed to be empty
             for any transition other than the initial block proposal"""
             if len(nstate.in_messages) == 0 \
-                    and (not Giskard.is_block_proposer(full_node, nstate.node_view, nodes)
+                    and ((not Giskard.is_block_proposer(full_node, nstate.node_view, nodes))
                          or (Giskard.is_block_proposer(full_node, nstate.node_view, nodes)
                              and len(nstate.out_messages) > 0)):  # The state right after the initial proposal
                 return True
@@ -1644,8 +1644,11 @@ class Giskard:
                 Giskard.inc_nr_of_checked_transitions()
                 break
         if not transition_correct:  # check if transition was a timeout
-            import pdb;
-            pdb.set_trace()
+            if len(nstate.in_messages) > 0 \
+                    and nstate.in_messages[0].message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+                hanging_prepareqc = nstate.in_messages.pop(0)  # hanging PrepareQC msg could still be in the in_buffer
+            if nstate_prime != Giskard.flip_timeout(nstate):
+                import pdb; pdb.set_trace()
             return nstate_prime == Giskard.flip_timeout(nstate)
         else:
             return True
@@ -1680,8 +1683,12 @@ class Giskard:
         :returns the next gstate where the node has its next transition """
         tmp_gstate = gtrace.gtrace[i]
         for j in range(i, len(gtrace.gtrace)):
-            if gtrace.gtrace[j].gstate[node][-1] != tmp_gstate.gstate[node][-1]:
-                return gtrace.gtrace[j]
+            try:
+                if gtrace.gtrace[j].gstate[node][-1] != tmp_gstate.gstate[node][-1]:
+                    return gtrace.gtrace[j]
+            except KeyError as e:
+                print(e)
+                print("Sometimes key")
         return None
 
     @staticmethod
