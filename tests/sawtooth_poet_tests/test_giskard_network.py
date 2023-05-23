@@ -43,7 +43,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'processors': NodeController.intkey_config_registry,
             'peering': NodeController.everyone_peers_with_everyone,
             'schedulers': NodeController.even_parallel_odd_serial,
-            'rounds': 1,
+            'rounds': 2,
             'start_nodes_per_round': 4,
             'stop_nodes_per_round': 0,
             'batches': 8,
@@ -119,6 +119,7 @@ class TestGiskardNetwork(unittest.TestCase):
             LOGGER.info("\n\nsent batches\n\n")
             self.assert_consensus()
             LOGGER.info("\n\nasserted consensus\n\n")
+        time.sleep(10)
         self.stop_nodes(stop_nodes_per_round)
         LOGGER.info("\n\nstopped nodes\n\n")
         giskard_tester.exit = True

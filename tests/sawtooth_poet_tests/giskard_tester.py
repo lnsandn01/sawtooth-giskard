@@ -182,7 +182,7 @@ class GiskardTester:
         f.close()
         nstates = jsonpickle.decode(content)
         nodes = []
-        table = [['block_num', 'view', 'block_index', 'block_id', 'proposer', 'votes_in_total', 'qc_in_total', 'honest'], []]
+        table = [['block_num', 'view', 'block_index', 'block_id', 'proposer', 'votes_in_total', 'qc_in_total', 'honest', 'carryover'], []]
         blocks = []
         nodes_states = {}
         handled_msgs = []
@@ -215,6 +215,7 @@ class GiskardTester:
                         honest = "h"
                         if msg.block.payload == "Beware, I am a malicious block":
                             honest = "x"
+                        carryover = "x"
                         if isinstance(msg.block.signer_id, str):
                             sender = msg.block.signer_id[0:6]
                         if hasattr(msg.block.signer_id, 'hex'):
@@ -222,13 +223,18 @@ class GiskardTester:
                         if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
                             votes = 1
                         table.append([msg.block.block_num, nstate.node_view, msg.block.block_index,
-                                      msg.block.block_id[0:6], sender, votes, 0, honest])
+                                      msg.block.block_id[0:6], sender, votes, 0, honest, carryover])
                 else:
-                    pos = GiskardTester.pos_block_in_table(table, msg.block.block_id, msg.block.payload)
+                    pos = GiskardTester.pos_block_in_table(table,
+                                                           msg.block.block_id,
+                                                           msg.block.payload,
+                                                           msg.view)
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
                         table[pos][5] += 1  # update votes
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
                         table[pos][6] += 1  # update votes
+                    if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
+                        table[pos][8] = "c"  # carryover block from ViewChangeQC message
 
         print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         file_name3 = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
@@ -237,13 +243,14 @@ class GiskardTester:
         f.close()
 
     @staticmethod
-    def pos_block_in_table(table, block_id, payload):
+    def pos_block_in_table(table, block_id, payload, view):
         for i in range(2, len(table)):
             if payload == "Beware, I am a malicious block":
                 if table[i][7] == "x":
                     return i
             else:
-                if table[i][3] == block_id[0:6]:
+                if table[i][3] == block_id[0:6] \
+                        and table[i][1] == view:
                     return i
             i += 1
         return 3
