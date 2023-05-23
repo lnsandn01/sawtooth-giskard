@@ -47,7 +47,7 @@ from sawtooth_poet_engine.pending import PendingForks
 from sawtooth_poet_engine.giskard_node import GiskardNode
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.INFO)
+LOGGER.setLevel(logging.ERROR)
 
 
 class GiskardEngine(Engine):
@@ -434,10 +434,10 @@ class GiskardEngine(Engine):
             return
         """ after timeout, don't handle any other msg than viewchange msgs """
         if self.nstate.timeout and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
-                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC \
-                and not self.accept_msgs_after_timeout:
-            LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
-            return
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
+                LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
+                return
+
         if len(self.peers) / self.k_peers < self.majority_factor \
                 or (len(self.in_buffer) > 0
                     and not self.msg_from_buffer):  # when not all peers are connected yet, collect msgs in a buffer
@@ -535,8 +535,8 @@ class GiskardEngine(Engine):
         if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
             self.node.block_cache.block_store.uncommitted_blocks.append(msg.block)
         """ Pending blocks are to-be-proposed blocks, if it is already proposed, remove it here """
-        #self.node.block_cache.remove_pending_block(msg.block.block_id)
-        #if msg.block.block_num == 4 and msg.view == 2 and Giskard.is_block_proposer(self.nstate.node_id, 0, self.peers):
+        # self.node.block_cache.remove_pending_block(msg.block.block_id)
+        # if msg.block.block_num == 4 and msg.view == 2 and Giskard.is_block_proposer(self.nstate.node_id, 0, self.peers):
         #    import pdb;
         #    pdb.set_trace()
         if msg.block == GiskardGenesisBlock():
@@ -549,6 +549,8 @@ class GiskardEngine(Engine):
             LOGGER.info("parent in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
                 self.nstate, msg, self.node.block_cache, self.peers)
+            if len(lm) == 0:
+                import pdb; pdb.set_trace()
         else:
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
         self._send_state_update(lm)
@@ -681,7 +683,6 @@ class GiskardEngine(Engine):
                                               self.peers):
             LOGGER.info("ViewChange quorum reached")
             self.accept_msgs_after_timeout = True
-            self.nstate = Giskard.remove_higher_block_msgs_after_viewchange_qc(self.nstate, msg.block)
             # TODO add to transition test viewchange
             if Giskard.is_block_proposer(self.nstate.node_id, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("ViewChange new proposer")
@@ -715,8 +716,8 @@ class GiskardEngine(Engine):
 
         """ remove blocks as they gonna be re-proposed """
         self.node.block_cache.block_store.uncommitted_blocks[:] = [
-                    block for block in self.node.block_cache.block_store.uncommitted_blocks
-                    if block.block_num <= msg.block.block_num
+            block for block in self.node.block_cache.block_store.uncommitted_blocks
+            if block.block_num <= msg.block.block_num
         ]
         self.node.block_cache.blocks_reached_qc_current_view = []
 

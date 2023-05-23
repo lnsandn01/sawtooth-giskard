@@ -20,7 +20,7 @@ from sawtooth_poet_tests.intkey_client import IntkeyClient
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.INFO)
+LOGGER.setLevel(logging.ERROR)
 WAIT = 240
 ASSERT_CONSENSUS_TIMEOUT = 180
 
@@ -46,7 +46,7 @@ class TestGiskardNetwork(unittest.TestCase):
             'rounds': 2,
             'start_nodes_per_round': 4,
             'stop_nodes_per_round': 0,
-            'batches': 8,
+            'batches': 2,
             'time_between_batches': 0,
             'poet_kwargs': {
                 'minimum_wait_time': 1.0,

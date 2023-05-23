@@ -1205,6 +1205,9 @@ class Giskard:
                                                    Giskard.highest_ViewChange_message(
                                                        Giskard.process(state, msg)).block,
                                                    GiskardGenesisBlock())) """
+        """ CHANGE from the original specification
+        Need to remove msgs of higher blocks, for later not to double vote"""
+        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         # The input has to include the current ViewChange message, just in
         # case that is the one which contains the highest block
         msg_qc = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,  # PrepareQC of the highest block
@@ -1249,8 +1252,12 @@ class Giskard:
     @staticmethod
     def process_ViewChange_quorum_new_proposer_set(state: NState,
                                                    msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
+        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
         msg_vc = Giskard.highest_ViewChange_message(state_prime)
+        # TODO prepareqc is never received, and is as of now impossible to handle,
+        #  as whether timeout and thus can't handle a prepareqc,
+        #  or discard msg old view if it would be sent after the viewchangeqc
         lm = [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                              # Send ViewChangeQC message before incrementing view to ensure the others can process it
                              state.node_view,
@@ -1285,6 +1292,9 @@ class Giskard:
         process and wait for receiving a ViewChangeQC msg from the next proposer """
         """ CHANGE from the original specification
         doesn't exist there, probably forgotten """
+        """ CHANGE from the original specification
+                Need to remove msgs of higher blocks, for later not to double vote"""
+        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         return state_prime == Giskard.process(state, msg) \
             and lm == [] \
             and Giskard.received(state, msg) \
@@ -1300,6 +1310,7 @@ class Giskard:
                                           msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
         """ CHANGE from the original specification
         doesn't exist there, probably forgotten """
+        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
         return [state_prime, []]
 
@@ -1482,7 +1493,8 @@ class Giskard:
                     pending_blocks.append(msg.block)
         blocks.sort(key=lambda b: b.block_num)
         pending_blocks.sort(key=lambda b: b.block_num)
-        cache = BlockCacheMock(blocks)
+        cache = BlockCacheMock([])
+        cache.block_store.uncommitted_blocks = blocks
         cache.pending_blocks = pending_blocks
         cache.blocks_reached_qc_current_view = blocks_reached_qc_current_view
         return cache
