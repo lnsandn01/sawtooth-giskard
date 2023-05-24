@@ -228,7 +228,8 @@ class GiskardTester:
                     pos = GiskardTester.pos_block_in_table(table,
                                                            msg.block.block_id,
                                                            msg.block.payload,
-                                                           msg.view)
+                                                           msg.view,
+                                                           msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC)
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
                         table[pos][5] += 1  # update votes
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
@@ -243,14 +244,14 @@ class GiskardTester:
         f.close()
 
     @staticmethod
-    def pos_block_in_table(table, block_id, payload, view):
+    def pos_block_in_table(table, block_id, payload, view, carryover):
         for i in range(2, len(table)):
             if payload == "Beware, I am a malicious block":
                 if table[i][7] == "x":
                     return i
             else:
                 if table[i][3] == block_id[0:6] \
-                        and table[i][1] == view:
+                        and (table[i][1] == view or carryover):
                     return i
             i += 1
         return 3

@@ -1,4 +1,3 @@
-
 class GiskardMessage(object):
     """All Giskard messages have at least those fields"""
 
@@ -30,3 +29,10 @@ class GiskardMessage(object):
                 "sender: " + self.sender +
                 "block" + self.block.__str__() +
                 "piggyback_block" + self.piggyback_block.__str__())
+
+    def __hash__(self):
+        return hash(hash(self.message_type)
+                    + hash(self.view)
+                    + hash(self.sender)
+                    + hash(self.block)
+                    + hash(self.piggyback_block))

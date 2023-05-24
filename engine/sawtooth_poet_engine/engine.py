@@ -47,7 +47,7 @@ from sawtooth_poet_engine.pending import PendingForks
 from sawtooth_poet_engine.giskard_node import GiskardNode
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.ERROR)
+LOGGER.setLevel(logging.INFO)
 
 
 class GiskardEngine(Engine):
@@ -262,7 +262,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            self._timeout_tests(1)  # for controlled testing of timeout behaviour
+            self._timeout_tests(4)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
@@ -298,7 +298,6 @@ class GiskardEngine(Engine):
 
                 if self._exit:
                     LOGGER.info("\n\n\nCalled exit on engine\n\n\n")
-                    self._write_prepvotes()
                     self.socket.close()
                     self.context.destroy()
                     break
@@ -358,6 +357,8 @@ class GiskardEngine(Engine):
         LOGGER.info('Received %s', block)
         self._check_block(block.block_id)
         self._validating_blocks.add(block.block_id)
+        if block.block_num > 6:  # TODO remove after full tests are done
+            return
         """ Giskard """
         """ append to pending blocks, the blocks that are not yet proposed """
         if not self.node.block_cache.pending_blocks_same_height_exists(block.block_num) \
@@ -435,8 +436,8 @@ class GiskardEngine(Engine):
         """ after timeout, don't handle any other msg than viewchange msgs """
         if self.nstate.timeout and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
                 and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
-                LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
-                return
+            LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
+            return
 
         if len(self.peers) / self.k_peers < self.majority_factor \
                 or (len(self.in_buffer) > 0
@@ -550,7 +551,8 @@ class GiskardEngine(Engine):
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
                 self.nstate, msg, self.node.block_cache, self.peers)
             if len(lm) == 0:
-                import pdb; pdb.set_trace()
+                import pdb;
+                pdb.set_trace()
         else:
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
         self._send_state_update(lm)
@@ -564,7 +566,7 @@ class GiskardEngine(Engine):
         self.nstate = Giskard.add(self.nstate, msg)
         self._send_state_update([])
 
-        if Giskard.prepare_stage(Giskard.process(self.nstate, msg), msg.block, self.peers):
+        if Giskard.prepare_stage_in_view(Giskard.process(self.nstate, msg), self.nstate.node_view, msg.block, self.peers):
             LOGGER.info("PrepareVote: block in prepare stage")
             """ block reached prepare stage, add it to the uncommitted blocks """
             if msg.block not in self.node.block_cache.block_store.uncommitted_blocks:
@@ -686,6 +688,7 @@ class GiskardEngine(Engine):
             # TODO add to transition test viewchange
             if Giskard.is_block_proposer(self.nstate.node_id, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("ViewChange new proposer")
+                # TODO if own block was not chosen and was higher -> re-add to pending blocks
                 if len(self.node.block_cache.pending_blocks) >= 3:
                     LOGGER.info("propose new blocks from view change quorum new proposer")
                     self._view_changeQC_new_proposer(msg)
@@ -745,6 +748,10 @@ class GiskardEngine(Engine):
                 self._handle_prepare_block(msg)
 
     def _timeout_tests(self, test: int):
+        """ As networks can be very unpredictable,
+        is timeout behaviour tested in a controlled way,
+        for only one timeout per run.
+        TODO An actual timeout protocol / synchronization protocol is needed """
         if test == 1:  # first block of view is carryover block
             if self.nstate.node_view == 1 \
                     and Giskard.highest_prepare_block_in_view(self.nstate,
@@ -768,8 +775,25 @@ class GiskardEngine(Engine):
                 self.timeout_after = 5  # recieving 3 new blocks takes longer than 5 seconds -> guaranteed timeout in view 1
             else:
                 self.timeout_after = 20000  # to make sure no more timeouts that disrupt testing
+        elif test == 4:
+            """ only one node will receive all initial votes for block 4
+            all other nodes will discard them, as they already timeout
+            This test is intended to run with at least 3 nodes"""
+            if self.nstate.node_view == 1 \
+                    and ((Giskard.highest_prepare_block_in_view(self.nstate,
+                                                                self.nstate.node_view,
+                                                                self.peers).block_num == 3
+                          and not Giskard.is_block_proposer(self.node, 0, self.peers))
+                         or (Giskard.highest_prepare_block_in_view(self.nstate,
+                                                                   self.nstate.node_view,
+                                                                   self.peers).block_num == 4
+                             and Giskard.is_block_proposer(self.node, 0, self.peers))):
+                self.timeout_after = 0  # timeout immediately
+            else:
+                self.timeout_after = 20000
 
     def _handle_prepare_block_malicious(self, msg: GiskardMessage):
+        """ A malicious node is allowed to double vote in the same view """
         LOGGER.info("Handle PrepareBlockMalicious")
         if msg.block.payload == "Beware, I am a malicious block":
             LOGGER.info("Handling a malicious prepareblock")
@@ -845,12 +869,17 @@ class GiskardEngine(Engine):
         return malicious_propose
 
     def _send_state_update(self, lm):
+        """ Sends state updates to the GiskardTester
+        this slows the network down by a lot,
+        on a simple ubuntu vm will the GiskardTester be killed,
+        when you have more than 4 nodes and or 11 blocks """
         state_msg = pickle.dumps([self.nstate, lm], pickle.DEFAULT_PROTOCOL)
         tracker: zmq.MessageTracker = self.socket.send(state_msg, 0, False, True)
         while not tracker.done:
             continue
 
     def _send_out_msgs(self, lm):
+        """ Broadcasts messages to all connected peers """
         LOGGER.info("send message: " + str(len(lm)))
         for msg in lm:  # TODO messages can be received out of order
             LOGGER.info(
@@ -859,17 +888,3 @@ class GiskardEngine(Engine):
 
             self._service.broadcast(bytes(str(msg.message_type), encoding='utf-8'),
                                     bytes(jsonpickle.encode(msg, unpicklable=True), encoding='utf-8'))
-
-    def _write_prepvotes(self):
-        """ for msg in lm:
-            if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
-                if msg.block.block_id.hex() not in self.sent_prep_votes.keys():
-                    self.sent_prep_votes.update({msg.block.block_id.hex(): 1})
-                else:
-                    self.sent_prep_votes[msg.block.block_id.hex()] += 1
-        self._write_prepvotes() """
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/prep_votes_node" \
-                    + self._validator_connect[-1] + ".txt"
-        f = open(file_name, 'w')
-        f.write(self.sent_prep_votes.__str__())
-        f.close()

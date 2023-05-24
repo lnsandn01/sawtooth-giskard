@@ -151,7 +151,6 @@ class PoetBlock:
             + ")"
         )
 
-
 class NewBlockHeader:
     '''The header for the block that is to be initialized.'''
     def __init__(self, previous_block, signer_public_key):

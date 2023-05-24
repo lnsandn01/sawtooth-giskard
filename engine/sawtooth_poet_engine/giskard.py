@@ -274,7 +274,6 @@ class Giskard:
         state_prime.timeout = True
         return state_prime
 
-
     # endregion
 
     # region local state properties
@@ -322,12 +321,13 @@ class Giskard:
 
     @staticmethod
     def exists_same_height_block(state: NState, b: GiskardBlock) -> bool:
-        """ Returns True if there is a block in the out_messages buffer with the same height """
+        """ Returns True if there is a block in the out_messages buffer with the same height in the same view """
         msg: GiskardMessage
         for msg in state.out_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
                     and b.block_num == msg.block.block_num \
-                    and b != msg.block:
+                    and b != msg.block \
+                    and msg.view == state.node_view:
                 return True
         return False
 
@@ -337,21 +337,24 @@ class Giskard:
         for msg in state.counting_messages:
             if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
                     and b.block_num == msg.block.block_num \
-                    and b != msg.block:
+                    and b != msg.block\
+                    and msg.view == state.node_view:
                 return True
         return False
 
     @staticmethod
-    def same_height_block_msg(b: GiskardBlock, msg: GiskardMessage) -> bool:
+    def same_height_block_msg(state: NState, b: GiskardBlock, msg: GiskardMessage) -> bool:
         return msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and b.block_num == msg.block.block_num \
-            and b != msg.block
+            and b != msg.block \
+            and msg.view == state.node_view
 
     @staticmethod
     def handled_block_same_height_in_msgs(b, state: NState):
         for msg in state.counting_messages + state.out_messages:
             try:
-                if b.block_num == msg.block.block_num:
+                if b.block_num == msg.block.block_num \
+                        and msg.view == state.node_view:
                     return True
             except AttributeError as e:
                 print(msg.__str__())
@@ -384,12 +387,10 @@ class Giskard:
         """ On ViewChangeQC, remove all msgs related to higher blocks than the one from ViewChangeQC
         This is to allow voting on what would be same height blocks """
         state_prime = copy.deepcopy(state)
-        for msg in state_prime.counting_messages:
-            if msg.block.block_num > block.block_num:
-                state_prime.counting_messages.remove(msg)
-        for msg in state_prime.out_messages:
-            if msg.block.block_num > block.block_num:
-                state_prime.out_messages.remove(msg)
+        state_prime.counting_messages[:] = [msg for msg in state_prime.counting_messages
+                                            if msg.block.block_num <= block.block_num]
+        state_prime.out_messages[:] = [msg for msg in state_prime.out_messages
+                                       if msg.block.block_num <= block.block_num]
         return state_prime
 
     # endregion
@@ -414,6 +415,9 @@ class Giskard:
     @staticmethod
     def vote_quorum_in_view(state: NState, view: int, b: GiskardBlock, peers) -> bool:
         """ Returns True if there is a vote quorum in the given view, for the given block """
+        if b is None:
+            print("vote_quorum_in_view: block given was None")
+            return False
         if GiskardGenesisBlock() == b and view == 0:  # TODO check genesis block behaviour and make it consistent
             return True
         return Giskard.quorum(Giskard.processed_PrepareVote_in_view_about_block(state, view, b), peers)
@@ -428,6 +432,9 @@ class Giskard:
     def PrepareQC_in_view(state: NState, view: int, b: GiskardBlock) -> bool:
         """ Returns True if there is a PrepareQC message in the counting_blocks buffer,
         for the given block and view """
+        if b is None:
+            print("PrepareQC_in_view: block given was None")
+            return False
         for msg in state.counting_messages:
             if msg.view == view \
                     and msg.block == b \
@@ -537,7 +544,22 @@ class Giskard:
     @staticmethod
     def view_change_quorum_in_view(state: NState, view: int, peers) -> bool:
         """ Returns True if there is a quorum of ViewChange messages for the given view """
-        return Giskard.quorum(Giskard.processed_ViewChange_in_view(state, view), peers)
+        """ CHANGE from original specification
+        msgs must be about the same block"""
+        processed_msgs = Giskard.processed_ViewChange_in_view(state, view)
+        processed_msgs_map = {}
+        maximum = ('', 0)  # (occurring element, occurrences)
+        for n in processed_msgs:
+            if n.block.block_num in processed_msgs_map:
+                processed_msgs_map[n.block.block_num] += 1
+            else:
+                processed_msgs_map[n.block.block_num] = 1
+
+            # Keep track of maximum on the go
+            if processed_msgs_map[n.block.block_num] > maximum[1]: maximum = (n.block.block_num, processed_msgs_map[n.block.block_num])
+
+        processed_msgs[:] = [msg for msg in processed_msgs if msg.block.block_num == maximum[0]]
+        return Giskard.quorum(processed_msgs, peers)
 
     @staticmethod
     def highest_ViewChange_block_in_view(state: NState, view: int) -> GiskardBlock:  # TODO test this one
@@ -1002,7 +1024,7 @@ class Giskard:
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE \
             and Giskard.view_valid(state, msg) \
             and not state.timeout \
-            and not Giskard.prepare_stage(Giskard.process(state, msg), msg.block, peers)
+            and not Giskard.prepare_stage_in_view(Giskard.process(state, msg), state.node_view, msg.block, peers)
 
     @staticmethod
     def process_PrepareVote_wait_set(state: NState, msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
@@ -1207,14 +1229,14 @@ class Giskard:
                                                    GiskardGenesisBlock())) """
         """ CHANGE from the original specification
         Need to remove msgs of higher blocks, for later not to double vote"""
-        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
+        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         # The input has to include the current ViewChange message, just in
         # case that is the one which contains the highest block
         msg_qc = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,  # PrepareQC of the highest block
-                                   state.node_view,
-                                   state.node_id,
-                                   Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
-                                   GiskardGenesisBlock())
+                                state.node_view,
+                                state.node_id,
+                                Giskard.highest_ViewChange_message(Giskard.process(state, msg)).block,
+                                GiskardGenesisBlock())
         msg_pr = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                                 # Send ViewChangeQC message before incrementing view to ensure the others can process it
                                 msg.view,
@@ -1252,7 +1274,7 @@ class Giskard:
     @staticmethod
     def process_ViewChange_quorum_new_proposer_set(state: NState,
                                                    msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
-        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
+        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
         msg_vc = Giskard.highest_ViewChange_message(state_prime)
         # TODO prepareqc is never received, and is as of now impossible to handle,
@@ -1286,15 +1308,15 @@ class Giskard:
 
     @staticmethod
     def process_ViewChange_quorum_not_new_proposer(state: NState, msg: GiskardMessage,
-                                      state_prime: NState, lm: List[GiskardMessage],
-                                      node, peers) -> bool:
+                                                   state_prime: NState, lm: List[GiskardMessage],
+                                                   node, peers) -> bool:
         """ Process ViewChange quorum reached,
         process and wait for receiving a ViewChangeQC msg from the next proposer """
         """ CHANGE from the original specification
         doesn't exist there, probably forgotten """
         """ CHANGE from the original specification
                 Need to remove msgs of higher blocks, for later not to double vote"""
-        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
+        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         return state_prime == Giskard.process(state, msg) \
             and lm == [] \
             and Giskard.received(state, msg) \
@@ -1307,10 +1329,10 @@ class Giskard:
 
     @staticmethod
     def process_ViewChange_quorum_not_new_proposer_set(state: NState,
-                                          msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
+                                                       msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
         """ CHANGE from the original specification
         doesn't exist there, probably forgotten """
-        state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
+        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
         return [state_prime, []]
 
@@ -1479,6 +1501,13 @@ class Giskard:
         for msg in state.counting_messages:
             if msg.block not in blocks:
                 if Giskard.prepare_stage(state, msg.block, peers):
+                    if Giskard.exists_same_height_block(state, msg.block):
+                        msg_with_higher_view_exists = False
+                        for m in state.counting_messages:
+                            if m.view > msg.view:
+                                msg_with_higher_view_exists = True
+                        if msg_with_higher_view_exists:
+                            continue
                     blocks.append(msg.block)
 
         for msg in state.counting_messages + state.in_messages:
@@ -1676,7 +1705,8 @@ class Giskard:
                     and nstate.in_messages[0].message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
                 hanging_prepareqc = nstate.in_messages.pop(0)  # hanging PrepareQC msg could still be in the in_buffer
             if nstate_prime != Giskard.flip_timeout(nstate):
-                import pdb; pdb.set_trace()
+                import pdb;
+                pdb.set_trace()
             return nstate_prime == Giskard.flip_timeout(nstate)
         else:
             return True

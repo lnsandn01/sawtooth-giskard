@@ -20,7 +20,7 @@ from sawtooth_poet_tests.intkey_client import IntkeyClient
 from sawtooth_sdk.protobuf.validator_pb2 import Message
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.ERROR)
+LOGGER.setLevel(logging.INFO)
 WAIT = 240
 ASSERT_CONSENSUS_TIMEOUT = 180
 
