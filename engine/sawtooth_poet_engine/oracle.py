@@ -297,13 +297,16 @@ class _BlockStoreProxy:
                 return GiskardBlock(block)
         return None
 
-    def get_parent_block(self, child_block):
+    def get_parent_block(self, child_block, ignore_block=None):
         """
         returns the parent block, if there is one in storage
+        :param ignore_block: block to ignore, potential same height block to iterate over
         :param child_block:
         :return: GiskardBlock(parent_block) or None
         """
         for block in self.get_block_iter():
+            if ignore_block is not None and block == ignore_block:
+                continue
             if child_block.previous_id == block.block_id \
                     and child_block.block_num - 1 == block.block_num:
                 return GiskardBlock(block)
@@ -311,13 +314,16 @@ class _BlockStoreProxy:
                 return None
         return None
 
-    def get_child_block(self, parent_block):
+    def get_child_block(self, parent_block, ignore_block=None):
         """
         returns the child block, if there is one in storage
+        :param ignore_block: block to ignore, potential same height block to iterate over
         :param parent_block:
         :return: GiskardBlock(parent_block) or None
         """
         for block in self.get_block_iter():
+            if ignore_block is not None and block == ignore_block:
+                continue
             if parent_block.block_id == block.previous_id \
                     and parent_block.block_num + 1 == block.block_num:
                 return GiskardBlock(block)

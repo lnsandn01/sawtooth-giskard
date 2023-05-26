@@ -262,7 +262,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            self._timeout_tests(4)  # for controlled testing of timeout behaviour
+            #self._timeout_tests(4)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
@@ -357,7 +357,7 @@ class GiskardEngine(Engine):
         LOGGER.info('Received %s', block)
         self._check_block(block.block_id)
         self._validating_blocks.add(block.block_id)
-        if block.block_num > 6:  # TODO remove after full tests are done
+        if block.block_num > 8:  # TODO remove after full tests are done
             return
         """ Giskard """
         """ append to pending blocks, the blocks that are not yet proposed """
@@ -583,7 +583,8 @@ class GiskardEngine(Engine):
                     and m.view == self.nstate.node_view:
                 if msg.block not in self.node.block_cache.blocks_reached_qc_current_view:
                     # self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)  # wait until another node sends prepareqc for this block, as transitions are triggered by receiving a msg
-                    if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
+                    if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER \
+                            and msg.block.payload != "Beware, I am a malicious block":  # malicious block only to test transitions and height injectivities
                         self.prepareQC_last_view = msg  # TODO maybe change directly to view change here
         self._send_state_update(lm)
         self._send_out_msgs(lm)
@@ -598,10 +599,12 @@ class GiskardEngine(Engine):
 
         """ The third block to reach qc in the view leads to a view change """
         if msg.block not in self.node.block_cache.blocks_reached_qc_current_view \
-                and msg.view == self.nstate.node_view:
+                and msg.view == self.nstate.node_view \
+                and msg.block.payload != "Beware, I am a malicious block":  # malicious block only to test transitions and height injectivities:
             self.node.block_cache.blocks_reached_qc_current_view.append(msg.block)
         """ prepareQC_last_view will be used for block generation for the next view """
-        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
+        if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER \
+                and msg.block.payload != "Beware, I am a malicious block":  # malicious block only to test transitions and height injectivities
             self.prepareQC_last_view = msg
 
         """ 3 blocks reached qc -> view change; propose blocks if you are the next proposer """

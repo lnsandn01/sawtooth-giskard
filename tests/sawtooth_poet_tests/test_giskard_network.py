@@ -59,7 +59,7 @@ class TestGiskardNetwork(unittest.TestCase):
                 'ztest_maximum_win_deviation': 3.075,
                 'ztest_minimum_win_count': 3
             },
-            'dishonest_nodes': 0})
+            'dishonest_nodes': 3})
 
     def test_poet_smoke(self):
         '''

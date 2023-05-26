@@ -315,7 +315,7 @@ class BlockStoreMock:
                 return GiskardBlock(block)
         return None
 
-    def get_parent_block(self, child_block):
+    def get_parent_block(self, child_block, ignore_block=None):
         """
         returns the parent block, if there is one in storage
         :param child_block:
@@ -323,6 +323,8 @@ class BlockStoreMock:
         """
         self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
         for block in reversed(self.blocks + self.uncommitted_blocks):
+            if ignore_block is not None and block == ignore_block:
+                continue
             if child_block.previous_id == block.block_id \
                     and child_block.block_num - 1 == block.block_num:
                 return GiskardBlock(block)
@@ -330,7 +332,7 @@ class BlockStoreMock:
                 return None
         return None
 
-    def get_child_block(self, parent_block):
+    def get_child_block(self, parent_block, ignore_block=None):
         """
         returns the child block, if there is one in storage
         :param parent_block:
@@ -338,6 +340,8 @@ class BlockStoreMock:
         """
         self.uncommitted_blocks.sort(key=lambda b1: b1.block_num)
         for block in reversed(self.blocks + self.uncommitted_blocks):
+            if ignore_block is not None and block == ignore_block:
+                continue
             if parent_block.block_id == block.previous_id \
                     and parent_block.block_num + 1 == block.block_num:
                 return GiskardBlock(block)

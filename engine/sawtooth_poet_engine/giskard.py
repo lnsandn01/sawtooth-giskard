@@ -95,15 +95,14 @@ class Giskard:
         return not Giskard.b_last(Giskard.generate_new_block(block, block_cache, block_index, node_id))
 
     @staticmethod
-    def parent_of(block: GiskardBlock, block_cache) -> GiskardBlock:
+    def parent_of(block: GiskardBlock, block_cache, ignore_block=None) -> GiskardBlock:
         """ Tries to get the parent block from the store
         :param block_cache:
         :param block:
         :return: GiskardBlock, or None """
         if block.block_num == 0:
             return GiskardGenesisBlock()
-        return block_cache.block_store.get_parent_block(
-            block)  # check in Store if there is a block with height -1 and the previous id
+        return block_cache.block_store.get_parent_block(block, ignore_block)  # check in Store if there is a block with height -1 and the previous id
 
     @staticmethod
     def parent_ofb(block: GiskardBlock, parent: GiskardBlock, block_cache) -> bool:
@@ -113,6 +112,11 @@ class Giskard:
         parent_cache = Giskard.parent_of(block, block_cache)
         if not parent_cache:
             return False
+        if parent_cache != parent:
+            """ for the case that there is a same height malicious parent block """
+            parent_cache = Giskard.parent_of(block, block_cache, parent_cache)
+            if not parent_cache:
+                return False
         return parent_cache == parent
 
     @staticmethod
@@ -1500,19 +1504,19 @@ class Giskard:
         blocks_reached_qc_current_view = []
         for msg in state.counting_messages:
             if msg.block not in blocks:
-                if Giskard.prepare_stage(state, msg.block, peers):
-                    if Giskard.exists_same_height_block(state, msg.block):
-                        msg_with_higher_view_exists = False
-                        for m in state.counting_messages:
-                            if m.view > msg.view:
-                                msg_with_higher_view_exists = True
-                        if msg_with_higher_view_exists:
-                            continue
-                    blocks.append(msg.block)
+                if Giskard.exists_same_height_block(state, msg.block):
+                    msg_with_higher_view_exists = False
+                    for m in state.counting_messages:
+                        if m.view > msg.view:
+                            msg_with_higher_view_exists = True
+                    if msg_with_higher_view_exists:
+                        continue
+                blocks.append(msg.block)
 
         for msg in state.counting_messages + state.in_messages:
             if msg.block not in blocks_reached_qc_current_view and msg.view == state.node_view \
-                    and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+                    and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC\
+                    and msg.block.payload != "Beware, I am a malicious block":
                 blocks_reached_qc_current_view.append(msg.block)
 
         if state_prime is not None:
@@ -1815,10 +1819,10 @@ class Giskard:
                         continue
                     blocks1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1][-1],
                                                                                  None,
-                                                                                 peers).block_store.blocks
+                                                                                 peers).block_store.uncommitted_blocks
                     blocks2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1],
                                                                                  None,
-                                                                                 peers).block_store.blocks
+                                                                                 peers).block_store.uncommitted_blocks
                     view = min(gstate[node1][-1].node_view, gstate[node2][-1].node_view)
                     for v, block1, block2 in itertools.product(range(0, view + 1), blocks1,
                                                                blocks2):  # Todo check if views start with 0 or 1
@@ -1929,9 +1933,9 @@ class Giskard:
                     if node1 == node2:
                         continue
                     block_cache1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1][-1], None, peers)
-                    blocks1 = block_cache1.block_store.blocks
+                    blocks1 = block_cache1.block_store.uncommitted_blocks
                     block_cache2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1], None, peers)
-                    blocks2 = block_cache2.block_store.blocks
+                    blocks2 = block_cache2.block_store.uncommitted_blocks
                     full_node1 = GiskardNode(node1, False, block_cache1)
                     full_node2 = GiskardNode(node2, False, block_cache2)
                     for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
@@ -1979,9 +1983,9 @@ class Giskard:
                     if node1 == node2:
                         continue
                     block_cache1 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node1][-1], None, peers)
-                    blocks1 = block_cache1.block_store.blocks
+                    blocks1 = block_cache1.block_store.uncommitted_blocks
                     block_cache2 = Giskard.create_mock_block_cache_from_counting_msgs(gstate[node2][-1], None, peers)
-                    blocks2 = block_cache2.block_store.blocks
+                    blocks2 = block_cache2.block_store.uncommitted_blocks
                     full_node1 = GiskardNode(node1, False, block_cache1)
                     full_node2 = GiskardNode(node2, False, block_cache2)
                     for block1, block2 in itertools.product(blocks1, blocks2):  # Todo check if views start with 0
