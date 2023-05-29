@@ -97,6 +97,7 @@ class GiskardEngine(Engine):
         self.start_time_view = 0
         self.timeout_after = 20000
         self.accept_msgs_after_timeout = False
+        self.test_special_timeout = False
         """ connection to GiskardTester, to send state updates """
         tester_endpoint = self.tester_endpoint(int(self._validator_connect[-1]))
         self.context = zmq.Context()  # zmq socket to send nstate updates after a transition via tcp
@@ -262,7 +263,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            #self._timeout_tests(4)  # for controlled testing of timeout behaviour
+            self._timeout_tests(4)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
@@ -357,7 +358,7 @@ class GiskardEngine(Engine):
         LOGGER.info('Received %s', block)
         self._check_block(block.block_id)
         self._validating_blocks.add(block.block_id)
-        if block.block_num > 8:  # TODO remove after full tests are done
+        if block.block_num > 7:  # TODO remove after full tests are done
             return
         """ Giskard """
         """ append to pending blocks, the blocks that are not yet proposed """
@@ -435,8 +436,9 @@ class GiskardEngine(Engine):
             return
         """ after timeout, don't handle any other msg than viewchange msgs """
         if self.nstate.timeout and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
-                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
-            LOGGER.info("Discarded msg, not a viewchange nor viewchangeqc")
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC\
+                and gmsg.message_type != GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
+            LOGGER.info("Discarded msg, not a viewchange/QC nor prepareqc")
             return
 
         if len(self.peers) / self.k_peers < self.majority_factor \
@@ -550,9 +552,6 @@ class GiskardEngine(Engine):
             LOGGER.info("parent in prepare stage")
             self.nstate, lm = Giskard.process_PrepareBlock_vote_set(
                 self.nstate, msg, self.node.block_cache, self.peers)
-            if len(lm) == 0:
-                import pdb;
-                pdb.set_trace()
         else:
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)
         self._send_state_update(lm)
@@ -578,6 +577,7 @@ class GiskardEngine(Engine):
             LOGGER.info("PrepareVote: block not in prepare stage")
             self.nstate, lm = Giskard.process_PrepareVote_wait_set(
                 self.nstate, msg)
+        contains_qc_4 = False
         for m in lm:
             if m.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC \
                     and m.view == self.nstate.node_view:
@@ -586,7 +586,13 @@ class GiskardEngine(Engine):
                     if msg.block.block_index == LAST_BLOCK_INDEX_IDENTIFIER \
                             and msg.block.payload != "Beware, I am a malicious block":  # malicious block only to test transitions and height injectivities
                         self.prepareQC_last_view = msg  # TODO maybe change directly to view change here
+                if self.test_special_timeout and m.block.block_num == 4 and self.nstate.node_view == 1:
+                    contains_qc_4 = True
         self._send_state_update(lm)
+        """ Do not broadcast this prepqc for this special test
+        block 4 should be in local prep stage for only this node"""
+        if self.test_special_timeout and contains_qc_4:
+            lm[:] = [m for m in lm if m.message_type != GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC]
         self._send_out_msgs(lm)
 
     def _handle_prepare_qc(self, msg):
@@ -608,7 +614,8 @@ class GiskardEngine(Engine):
             self.prepareQC_last_view = msg
 
         """ 3 blocks reached qc -> view change; propose blocks if you are the next proposer """
-        if len(self.node.block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER:
+        if len(self.node.block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER \
+                and not self.nstate.timeout:
             self.start_time_view = time.time()  # start new view time directly here
             if Giskard.is_block_proposer(self.node, self.nstate.node_view + 1, self.peers):
                 LOGGER.info("last block qc new proposer node: " + self._validator_connect[-1])
@@ -629,7 +636,7 @@ class GiskardEngine(Engine):
                             + " got view: " + str(self.nstate.node_view))
                 self.node.block_cache.blocks_reached_qc_current_view = []  # reset those as view change happened
         else:
-            """ Less than 3 blocks have reached qc -> only process the msg """
+            """ Less than 3 blocks have reached qc, or timeout period -> only process the msg """
             LOGGER.info("not all blocks qc yet")
             self.nstate, lm = Giskard.process_PrepareQC_non_last_block_set(
                 self.nstate, msg, self.node.block_cache)
@@ -672,6 +679,14 @@ class GiskardEngine(Engine):
             self.nstate.node_view += 1  # TODO check if this makes transitions not work
             self.hanging_prepareQC_new_proposer = False
         view_change_msg = Giskard.make_ViewChange(self.nstate, self.peers)
+        """ Special Test: Send ViewChange msg with parent block,
+        as the timeout node with the locally higher block, 
+        this is to guarantee a quorum of ViewChange messages,
+        without introducing block 4 as the highest block """
+        if self.test_special_timeout \
+                and Giskard.is_block_proposer(self.node, 0, self.peers) \
+                and self.nstate.node_view == 1:
+            view_change_msg.block = Giskard.parent_of(view_change_msg.block, self.node.block_cache)
         self._send_out_msgs([view_change_msg])
         self._handle_view_change(view_change_msg)
 
@@ -679,6 +694,7 @@ class GiskardEngine(Engine):
         LOGGER.info("Handle ViewChange")
         if self.hanging_prepareQC_new_proposer and len(self.nstate.in_messages) > 0:
             hanging_prepareqc = self.nstate.in_messages.pop(0)  # hanging PrepareQC could still be in the in_buffer
+        self.node.block_cache.remove_pending_block(msg.block.block_id)
 
         self.nstate = Giskard.add(self.nstate, msg)
         self._send_state_update([])
@@ -781,7 +797,9 @@ class GiskardEngine(Engine):
         elif test == 4:
             """ only one node will receive all initial votes for block 4
             all other nodes will discard them, as they already timeout
-            This test is intended to run with at least 3 nodes"""
+            This test is intended to run with at least 3 nodes, 
+            as quorum > 2/3, will also the viewchange msg with block 4 be received """
+            self.test_special_timeout = True
             if self.nstate.node_view == 1 \
                     and ((Giskard.highest_prepare_block_in_view(self.nstate,
                                                                 self.nstate.node_view,

@@ -133,9 +133,9 @@ class Giskard:
 
     @staticmethod
     def has_at_least_two_thirds(nodes, peers) -> bool:
-        """ Check if the given nodes are a two third majority in the current view """
+        """ Check if the given nodes are more than a two third majority in the current view """
         matches = [node for node in nodes if node in peers]
-        return len(matches) / len(peers) >= 2 / 3
+        return len(matches) / len(peers) > 2 / 3
 
     @staticmethod
     def has_at_least_one_third(nodes, peers) -> bool:
@@ -548,21 +548,7 @@ class Giskard:
     @staticmethod
     def view_change_quorum_in_view(state: NState, view: int, peers) -> bool:
         """ Returns True if there is a quorum of ViewChange messages for the given view """
-        """ CHANGE from original specification
-        msgs must be about the same block"""
         processed_msgs = Giskard.processed_ViewChange_in_view(state, view)
-        processed_msgs_map = {}
-        maximum = ('', 0)  # (occurring element, occurrences)
-        for n in processed_msgs:
-            if n.block.block_num in processed_msgs_map:
-                processed_msgs_map[n.block.block_num] += 1
-            else:
-                processed_msgs_map[n.block.block_num] = 1
-
-            # Keep track of maximum on the go
-            if processed_msgs_map[n.block.block_num] > maximum[1]: maximum = (n.block.block_num, processed_msgs_map[n.block.block_num])
-
-        processed_msgs[:] = [msg for msg in processed_msgs if msg.block.block_num == maximum[0]]
         return Giskard.quorum(processed_msgs, peers)
 
     @staticmethod
@@ -1156,6 +1142,8 @@ class Giskard:
     def process_PrepareQC_non_last_block(state: NState, msg: GiskardMessage,
                                          state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
         """ Not-the-last block in the view - send PrepareVote messages for child block and wait """
+        """ CHANGE from the original specification
+        and not state.timeout removed, as we can process PrepareQC msgs during timeouts"""
         lm_prime = Giskard.pending_PrepareVote(state, msg, block_cache)
         return state_prime == Giskard.process(
             Giskard.record_plural(state, lm_prime),
@@ -1165,7 +1153,6 @@ class Giskard:
             and Giskard.honest_node(node) \
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC \
             and Giskard.view_valid(state, msg) \
-            and not state.timeout \
             and not len(block_cache.blocks_reached_qc_current_view) == LAST_BLOCK_INDEX_IDENTIFIER
 
     @staticmethod
