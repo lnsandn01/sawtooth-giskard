@@ -263,7 +263,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            self._timeout_tests(4)  # for controlled testing of timeout behaviour
+            #self._timeout_tests(4)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
