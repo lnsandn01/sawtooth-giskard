@@ -29,8 +29,9 @@ If you do not want to install Ubuntu onto your computer, consider installing a
 
 ## Running the Tests
 Go to the folder /usr/lib/python3/dist-packages/ and run the desired tests with the command:
-´´´
+
+```
 sudo nose2-3 -c sawtooth_poet_tests/nose2.cfg -v -s sawtooth_poet_tests/ test_giskard_network.TestGiskardNetwork.test_giskard_network > /sawtooth_poet_tests/text.txt  2>&1
-´´´
+```
 
 This will store the logs from all nodes and the test into a text file. Replace *test_giskard_network.TestGiskardNetwork.**test_giskard_network*** with the desired test. You can find the tests in the file test_giskard_network.py in the folder tests/sawtooth_poet_tests/
