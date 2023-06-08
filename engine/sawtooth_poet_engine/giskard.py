@@ -1272,9 +1272,10 @@ class Giskard:
         #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
         msg_vc = Giskard.highest_ViewChange_message(state_prime)
-        # TODO prepareqc is never received, and is as of now impossible to handle,
-        #  as whether timeout and thus can't handle a prepareqc,
-        #  or discard msg old view if it would be sent after the viewchangeqc
+        # TODO prepareqc is discarded, as node is not the proposer of this view,
+        #  will handle this issue in the future as solving it might result in more unwanted behavior
+        #  needing the last PrepareBlock message for that to get the correct proposer,
+        #  but also need the other nodes to relax the discard msg, during viewchange process
         lm = [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                              # Send ViewChangeQC message before incrementing view to ensure the others can process it
                              state.node_view,

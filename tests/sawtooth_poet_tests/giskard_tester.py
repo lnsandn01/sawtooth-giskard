@@ -206,10 +206,12 @@ class GiskardTester:
                     continue
                 if hasattr(msg.block.block_id, 'hex'):
                     msg.block.block_id = msg.block.block_id.hex()
+                handled_block = False
                 if msg.block not in blocks:
                     blocks.append(msg.block)
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
                             or msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
+                        handled_block = True
                         sender = msg.sender
                         votes = 0
                         honest = "h"
@@ -225,11 +227,17 @@ class GiskardTester:
                         table.append([msg.block.block_num, nstate.node_view, msg.block.block_index,
                                       msg.block.block_id[0:6], sender, votes, 0, honest, carryover])
                 else:
-                    pos = GiskardTester.pos_block_in_table(table,
-                                                           msg.block.block_id,
-                                                           msg.block.payload,
-                                                           msg.view,
-                                                           msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC)
+                    handled_block = True
+                    pos = 0
+                    view = msg.view
+                    while pos == 0:
+                        pos = GiskardTester.pos_block_in_table(table,
+                                                               msg.block.block_id,
+                                                               msg.block.payload,
+                                                               view,
+                                                               msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC)
+                        view -= view
+
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
                         table[pos][5] += 1  # update votes
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
@@ -254,5 +262,5 @@ class GiskardTester:
                         and (table[i][1] == view or carryover):
                     return i
             i += 1
-        return 3
+        return 0
 
