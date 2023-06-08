@@ -673,9 +673,6 @@ class Giskard:
     @staticmethod
     def make_PrepareBlock(state: NState, previous_msg: GiskardMessage,
                           block_cache, block_index: int, block=None) -> GiskardMessage:
-        """ CHANGE FROM THE ORIGINAL SPECIFICATION
-        sometimes there are no 3 blocks ready for preperation,
-        so they are generated and send of one after another"""
         if block is None:
             block = Giskard.generate_new_block(previous_msg.block, block_cache, block_index, state.node_id)
         return GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK,
@@ -708,9 +705,10 @@ class Giskard:
         - a <<PrepareBlock>> message exists for the child block.
 
         Constructing pending PrepareVote messages for child messages with existing PrepareBlocks. """
-        """CHANGE from the verification code
+        """ CHANGE from the original specification
         here do I check for if a prepare vote has been already sent,
-        this check is nowhere to be found in the coq code"""
+        this check is nowhere to be found in the coq code
+        avoids sending too many messages, and expected from the english specification """
         """ CHANGE from the original specification
         lambda msg: msg.view == quorum_msg.view removed, needs to be prepare_block_msg instead,
         otherwise hinders voting for the first block of a new view """
@@ -727,7 +725,7 @@ class Giskard:
     def pending_PrepareVote_malicious(state: NState, quorum_msg: GiskardMessage, block_cache) -> List[GiskardMessage]:
         """ Extra function, as original specification would not maliciously vote for a block,
         as the original pending_PrepareVote checks for exists_same_height_block """
-        """CHANGE from the verification code
+        """ CHANGE from the original specification
         here do I check for if a prepare vote has been already sent,
         this check is nowhere to be found in the coq code"""
         """ CHANGE from the original specification
@@ -829,10 +827,7 @@ class Giskard:
     @staticmethod
     def propose_block_init_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
         """ Actually does the transition to propose blocks """
-        if len(block_cache.pending_blocks) < 3:
-            """CHANGE from the original specification
-            sometimes there are no 3 blocks ready for preperation, 
-            so they are generated and send of one after another"""
+        """if len(block_cache.pending_blocks) < 3:
             lm = []
             state_prime = state
             while block_cache.blocks_proposed_num <= LAST_BLOCK_INDEX_IDENTIFIER \
@@ -854,7 +849,7 @@ class Giskard:
                 block_cache.last_proposed_block = msg.block
                 lm.append(msg)
                 state_prime = Giskard.record(state, msg)
-            return [state_prime, lm]
+            return [state_prime, lm]"""
         previous_msg = Giskard.GenesisBlock_message(state)
         # msg = Giskard.make_PrepareBlock(
         #    state, previous_msg, block_cache, 0, None)
@@ -954,10 +949,12 @@ class Giskard:
     def process_PrepareBlock_vote(state: NState, msg: GiskardMessage,
                                   state_prime: NState, lm: List[GiskardMessage], node, block_cache, peers) -> bool:
         """ Parent block has reached QC - send PrepareVote for the block in that message and record in out buffer """
-        """CHANGE from the original specification
-        PrepareBlockmsg is passed in, but we also need the quorum msg
-        + pending_PrepareVote requires the msg to be in the counting msg buffer
-        + parent_block needs to be checked for prepare_stage not the child block"""
+        """ CHANGE from the original specification
+        PrepareBlockmsg is passed in, but we also need the quorum msg """
+        """ CHANGE from the original specification
+        pending_PrepareVote requires the msg to be in the counting msg buffer """
+        """ CHANGE from the original specification
+        parent_block needs to be checked for prepare_stage not the child block """
         quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
@@ -983,9 +980,10 @@ class Giskard:
     @staticmethod
     def process_PrepareBlock_vote_set(state: NState, msg: GiskardMessage,
                                       block_cache, peers) -> [NState, List[GiskardMessage]]:
-        """CHANGE from the original specification
-        PrepareBlockmsg is passed in, but we also need the quorum msg
-        + pending_PrepareVote requires the msg to be in the counting msg buffer"""
+        """ CHANGE from the original specification
+        PrepareBlockmsg is passed in, but we also need the quorum msg """
+        """ CHANGE from the original specification
+        pending_PrepareVote requires the msg to be in the counting msg buffer """
         quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
@@ -1029,6 +1027,8 @@ class Giskard:
         """ CHANGE from the original specification
         it only makes sense here to check if there is a same height block
         for the prepareVote msgs that we will be sending out """
+        """ CHANGE from the original specification
+        checking for prepareQC already sent, to avoid too many messages """
         # TODO is checking in the out_messages enough with exists_same_height_block ?
         lm_prime = []
         if not Giskard.prepare_qc_already_sent(state, msg.block):
@@ -1052,6 +1052,8 @@ class Giskard:
 
     @staticmethod
     def process_PrepareVote_vote_set(state: NState, msg: GiskardMessage, block_cache) -> [NState, List[GiskardMessage]]:
+        """ CHANGE from the original specification
+        checking for prepareQC already sent, to avoid too many messages """
         lm = []
         if not Giskard.prepare_qc_already_sent(state, msg.block):
             lm.append(Giskard.make_PrepareQC(state, msg))
@@ -1079,10 +1081,11 @@ class Giskard:
                                                   node, block_cache, peers) -> bool:
         """ Increment the view, propose next block """
         """ CHANGE from the original specification
-        removed and Giskard.last_block(msg.block) 
-        as the last prepareqc message i can receive can be for a previous block
-        + here we also need a quorum msg, 
-        as the last received prepareQC doesn't need to be the one of the highest block"""
+        removed Giskard.last_block(msg.block) 
+        as the last prepareqc message i can receive can be for a previous block """
+        """ CHANGE from the original specification
+        here we also need a quorum msg, 
+        as the last received prepareQC doesn't need to be the one of the highest block """
         quorum_block = None
         for block in block_cache.blocks_reached_qc_current_view:
             if block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
@@ -1106,6 +1109,9 @@ class Giskard:
     @staticmethod
     def process_PrepareQC_last_block_new_proposer_set(state: NState, msg: GiskardMessage,
                                                       block_cache, peers) -> [NState, List[GiskardMessage]]:
+        """ CHANGE from the original specification
+        here we also need a quorum msg,
+        as the last received prepareQC doesn't need to be the one of the highest block """
         quorum_block = None
         for block in block_cache.blocks_reached_qc_current_view:
             if block.block_index == LAST_BLOCK_INDEX_IDENTIFIER:
@@ -1122,7 +1128,7 @@ class Giskard:
         """ Last block in the view for to-be validator - increment view
         No child blocks can exist, so we don't need to send anything """
         """ CHANGE from the original specification
-        removed and Giskard.last_block(msg.block) 
+        removed Giskard.last_block(msg.block) 
         as the last prepareqc message i can receive can be for a previous block"""
         return state_prime == Giskard.increment_view(Giskard.process(state, msg)) \
             and lm == [] \
@@ -1143,7 +1149,7 @@ class Giskard:
                                          state_prime: NState, lm: List[GiskardMessage], node, block_cache) -> bool:
         """ Not-the-last block in the view - send PrepareVote messages for child block and wait """
         """ CHANGE from the original specification
-        and not state.timeout removed, as we can process PrepareQC msgs during timeouts"""
+        removed not state.timeout, as we can process PrepareQC msgs during timeouts"""
         lm_prime = Giskard.pending_PrepareVote(state, msg, block_cache)
         return state_prime == Giskard.process(
             Giskard.record_plural(state, lm_prime),
@@ -1211,6 +1217,7 @@ class Giskard:
                                                node, block_cache, peers) -> bool:
         """ For better understandability look at process_ViewChange_quorum_new_proposer_set """
         """ CHANGE from the original specification TODO insert back in but with getting the actual msg
+        this might work, but couldn't find a way to do it properly yet
         and Giskard.received(state, GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                                                    # This condition is necessary given ViewChange sending behavior
                                                    msg.view,
@@ -1218,9 +1225,6 @@ class Giskard:
                                                    Giskard.highest_ViewChange_message(
                                                        Giskard.process(state, msg)).block,
                                                    GiskardGenesisBlock())) """
-        """ CHANGE from the original specification
-        Need to remove msgs of higher blocks, for later not to double vote"""
-        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         # The input has to include the current ViewChange message, just in
         # case that is the one which contains the highest block
         msg_qc = GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,  # PrepareQC of the highest block
@@ -1304,10 +1308,8 @@ class Giskard:
         """ Process ViewChange quorum reached,
         process and wait for receiving a ViewChangeQC msg from the next proposer """
         """ CHANGE from the original specification
-        doesn't exist there, probably forgotten """
-        """ CHANGE from the original specification
-                Need to remove msgs of higher blocks, for later not to double vote"""
-        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
+        transition doesn't exist there, probably forgotten
+        Needed for successful transition tests, as this transition happens """
         return state_prime == Giskard.process(state, msg) \
             and lm == [] \
             and Giskard.received(state, msg) \
@@ -1322,7 +1324,8 @@ class Giskard:
     def process_ViewChange_quorum_not_new_proposer_set(state: NState,
                                                        msg: GiskardMessage) -> [NState, List[GiskardMessage]]:
         """ CHANGE from the original specification
-        doesn't exist there, probably forgotten """
+        doesn't exist there, probably forgotten
+        Needed for successful transition tests, as this transition happens """
         #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
         return [state_prime, []]
@@ -1362,7 +1365,7 @@ class Giskard:
                                                        msg.sender,
                                                        msg.block,
                                                        GiskardGenesisBlock())) \
-        could be that not received yet and can't know the sender beforehand """
+        could be that not received yet, due to network problems -> out of order messages """
         return state_prime == \
             Giskard.increment_view(
                 Giskard.process(state, msg)) \
@@ -1460,6 +1463,9 @@ class Giskard:
         elif t == giskard_state_transition_type.PROCESS_PREPAREBLOCK_VOTE_TYPE:
             if old_version:  # bug in the original Coq code, this is here for testing the impact
                 return Giskard.process_PrepareBlock_pending_vote(state, msg, state_prime, lm, node, block_cache, peers)
+            """ CHANGE from the original specification
+            Fixed typo, here should be mapped to process_PrepareBlock_vote,
+            and not to process_PrepareBlock_pending_vote again. """
             return Giskard.process_PrepareBlock_vote(state, msg, state_prime, lm, node, block_cache, peers)
         elif t == giskard_state_transition_type.PROCESS_PREPAREVOTE_VOTE_TYPE:
             return Giskard.process_PrepareVote_vote(state, msg, state_prime, lm, node, block_cache, peers)
