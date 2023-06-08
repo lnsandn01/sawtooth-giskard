@@ -953,8 +953,6 @@ class Giskard:
         PrepareBlockmsg is passed in, but we also need the quorum msg """
         """ CHANGE from the original specification
         pending_PrepareVote requires the msg to be in the counting msg buffer """
-        """ CHANGE from the original specification
-        parent_block needs to be checked for prepare_stage not the child block """
         quorum_msg = Giskard.adhoc_ParentBlockQC_msg(state, GiskardGenesisBlock())
         if GiskardGenesisBlock() == msg.block:
             parent_block = GiskardGenesisBlock()
