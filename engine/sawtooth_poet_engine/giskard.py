@@ -944,7 +944,6 @@ class Giskard:
         state_prime = Giskard.process(state, msg)
         return [state_prime, []]
 
-    # TODO how do i receive several prepare block messages? This function requires me to have received two, as i don't call process_state on pending_PrepareVote
     @staticmethod
     def process_PrepareBlock_vote(state: NState, msg: GiskardMessage,
                                   state_prime: NState, lm: List[GiskardMessage], node, block_cache, peers) -> bool:
