@@ -206,12 +206,10 @@ class GiskardTester:
                     continue
                 if hasattr(msg.block.block_id, 'hex'):
                     msg.block.block_id = msg.block.block_id.hex()
-                handled_block = False
                 if msg.block not in blocks:
                     blocks.append(msg.block)
                     if msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK \
                             or msg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_VOTE:
-                        handled_block = True
                         sender = msg.sender
                         votes = 0
                         honest = "h"
@@ -227,7 +225,6 @@ class GiskardTester:
                         table.append([msg.block.block_num, nstate.node_view, msg.block.block_index,
                                       msg.block.block_id[0:6], sender, votes, 0, honest, carryover])
                 else:
-                    handled_block = True
                     pos = 0
                     view = msg.view
                     while pos == 0:

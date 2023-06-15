@@ -263,7 +263,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            self._timeout_tests(3)  # for controlled testing of timeout behaviour
+            self._timeout_tests(4)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
@@ -732,6 +732,9 @@ class GiskardEngine(Engine):
     def _handle_view_change_qc(self, msg):
         """ Timeout occured, which led to view change msgs being exchanged,
         which reached a quorum -> increment view, next proposer, propose blocks """
+        if Giskard.is_block_proposer(self.nstate.node_id, self.nstate.node_view + 1, self.peers):
+            LOGGER.info("Discarded ViewChangeQC message, which lets the next proposer increment its view 2 times")
+            return
         LOGGER.info("Handle ViewChangeQC")
         self.nstate = Giskard.add(self.nstate, msg)
         self._send_state_update([])

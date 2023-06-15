@@ -1309,8 +1309,14 @@ class Giskard:
         """ CHANGE from the original specification
         transition doesn't exist there, probably forgotten
         Needed for successful transition tests, as this transition happens """
-        return state_prime == Giskard.process(state, msg) \
-            and lm == [] \
+        msg_vc = Giskard.highest_ViewChange_message(Giskard.process(state, msg))
+        lm_prime = []
+        if not Giskard.prepare_qc_already_sent(state, msg_vc.block):
+            msg_pr = Giskard.make_PrepareQC(state, msg_vc)
+            lm_prime.append(msg_pr)
+        lm_prime.append(Giskard.make_ViewChangeQC(Giskard.process(state, msg), msg_vc))
+        return state_prime == Giskard.record_plural(Giskard.process(state, msg), lm_prime) \
+            and lm == lm_prime \
             and Giskard.received(state, msg) \
             and Giskard.honest_node(node) \
             and msg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
@@ -1325,9 +1331,19 @@ class Giskard:
         """ CHANGE from the original specification
         doesn't exist there, probably forgotten
         Needed for successful transition tests, as this transition happens """
-        #state = Giskard.remove_higher_block_msgs_after_viewchange_qc(state, msg.block)
         state_prime = Giskard.process(state, msg)
-        return [state_prime, []]
+        msg_vc = Giskard.highest_ViewChange_message(state_prime)
+        # TODO prepareqc is discarded, as node is not the proposer of this view,
+        #  will handle this issue in the future as solving it might result in more unwanted behavior
+        #  needing the last PrepareBlock message for that to get the correct proposer,
+        #  but also need the other nodes to relax the discard msg, during viewchange process
+        lm = []
+        if not Giskard.prepare_qc_already_sent(state, msg_vc.block):
+            msg_pr = Giskard.make_PrepareQC(state, msg_vc)
+            lm.append(msg_pr)
+        lm.append(Giskard.make_ViewChangeQC(state_prime, msg_vc))
+        state_prime = Giskard.record_plural(state_prime, lm)
+        return [state_prime, lm]
 
     @staticmethod
     def process_ViewChange_pre_quorum(state: NState, msg: GiskardMessage,
@@ -1606,6 +1622,11 @@ class Giskard:
                                               tmp_block_cache)  # send PrepareBlock messages
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_QUORUM_NOT_NEW_PROPOSER_TYPE:
             msg = state.in_messages[0]
+            msg_vc = Giskard.highest_ViewChange_message(Giskard.process(state, msg))
+            if not Giskard.prepare_qc_already_sent(Giskard.process(state, msg), msg_vc.block):
+                msg_pr = Giskard.make_PrepareQC(Giskard.process(state, msg), msg_vc)
+                lm.append(msg_pr)
+            lm.append(Giskard.make_ViewChangeQC(Giskard.process(state, msg), msg_vc))
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGE_PRE_QUORUM_TYPE:
             msg = state.in_messages[0]
         elif t == giskard_state_transition_type.PROCESS_VIEWCHANGEQC_SINGLE_TYPE:
