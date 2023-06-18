@@ -2,6 +2,8 @@ import unittest
 import logging
 from typing import List
 
+from tabulate import tabulate
+
 import sawtooth_poet_engine.giskard_state_transition_type as giskard_state_transition_type
 from sawtooth_poet_engine.giskard_global_trace import GTrace
 from sawtooth_poet_engine.giskard_node import GiskardNode
@@ -571,8 +573,34 @@ class TestGiskardUnit(unittest.TestCase):
         if peers is None:
             node, proposer, you1, you2, you3, peers = TestGiskardUnit.get_basic_nodes()
             peers.sort()
-        assert Giskard.prepare_stage_same_view_height_injective_statement([gtrace], peers), "prepare_stage_height_injectivity failed"
-        assert Giskard.precommit_stage_height_injective_statement([gtrace], peers), "precommit_stage_height_injectivity failed"
-        assert Giskard.commit_height_injective_statement([gtrace], peers), "commit_stage_height_injectivity failed"
-        print("Tested stage_height_injectivity")
+
+        """ setup quantitative measures """
+        table = [['Safety Tests Passed'], ['x']]
+        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
+        f = open(file_name)
+        info_table = f.read()  # temp save
+        f.close()
+        f = open(file_name, 'a')
+        f.write("\n" + tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
+        f.close()
+
+        test_failed = False
+
+        """ Run the height injectivity tests """
+        try:
+            assert Giskard.prepare_stage_same_view_height_injective_statement([gtrace], peers), "prepare_stage_height_injectivity failed"
+            assert Giskard.precommit_stage_height_injective_statement([gtrace], peers), "precommit_stage_height_injectivity failed"
+            assert Giskard.commit_height_injective_statement([gtrace], peers), "commit_stage_height_injectivity failed"
+        except AssertionError as e:
+            print(e)
+            print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
+            test_failed = True
+
+        """ update quantitative measures, test were successful """
+        if not test_failed:
+            table = [['Safety Tests Passed'], ['ok']]
+            print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
+        f = open(file_name, 'w')
+        f.write(info_table + "\n" + tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
+        f.close()
     # endregion

@@ -263,7 +263,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            self._timeout_tests(4)  # for controlled testing of timeout behaviour
+            self._timeout_tests(0)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
@@ -471,13 +471,13 @@ class GiskardEngine(Engine):
             signer = gmsg.block.signer_id
             if hasattr(gmsg.block.signer_id, 'hex'):
                 signer = gmsg.block.signer_id.hex()
-            if not self.node.dishonest \
+            if not self.dishonest \
                     and not Giskard.is_block_proposer(signer, self.nstate.node_view, self.peers) \
                     and not gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE \
                     and not gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_VIEW_CHANGE_QC:
                 LOGGER.info("Discarded msg, block proposer not the proposer for this view")
                 return
-            if self.node.dishonest and gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
+            if self.dishonest and gmsg.message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_BLOCK:
                 self._handle_prepare_block_malicious(gmsg)
                 return
             handle_msg(gmsg)
@@ -774,6 +774,8 @@ class GiskardEngine(Engine):
         is timeout behaviour tested in a controlled way,
         for only one timeout per run.
         TODO An actual timeout protocol / synchronization protocol is needed """
+        if test == 0:
+            return
         if test == 1:  # first block of view is carryover block
             if self.nstate.node_view == 1 \
                     and Giskard.highest_prepare_block_in_view(self.nstate,
@@ -859,9 +861,7 @@ class GiskardEngine(Engine):
             """ Generate one malicious block for testing """
             if msg.block.payload != "Beware, I am a malicious block" \
                     and not self.recv_malicious_block \
-                    and (msg.block.block_num == 3) \
-                    and not Giskard.is_block_proposer(self.node, self.nstate.node_view,
-                                                      self.peers):  # Only propose one malicious block
+                    and (msg.block.block_num == 3):
                 malicious_propose = self._malicious_propose(msg, parent_block)
         else:
             self.nstate, lm = Giskard.process_PrepareBlock_pending_vote_set(self.nstate, msg)

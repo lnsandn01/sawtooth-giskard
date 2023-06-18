@@ -5,6 +5,7 @@ import traceback
 from functools import reduce
 from typing import List
 
+from tabulate import tabulate
 import jsonpickle
 
 from sawtooth_poet_engine.giskard_block import Block, GiskardBlock, GiskardGenesisBlock
@@ -1694,6 +1695,7 @@ class Giskard:
                     and ((not Giskard.is_block_proposer(full_node, nstate.node_view, nodes))
                          or (Giskard.is_block_proposer(full_node, nstate.node_view, nodes)
                              and len(nstate.out_messages) > 0)):  # The state right after the initial proposal
+                Giskard.inc_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")
                 return True
             """ Pull out inputs and create a mock block_cache """
             msg, block_cache, lm, dishonest = Giskard.get_inputs_for_transition(process, nstate, nstate_prime,
@@ -1714,17 +1716,17 @@ class Giskard:
 
             if found_transition and equal:
                 transition_correct = True  # CHANGE FROM THE ORIGINAL SPECIFICATION there whole gstates are compared
-                Giskard.inc_nr_of_checked_transitions()
                 break
         if not transition_correct:  # check if transition was a timeout
             if len(nstate.in_messages) > 0 \
                     and nstate.in_messages[0].message_type == GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC:
                 hanging_prepareqc = nstate.in_messages.pop(0)  # hanging PrepareQC msg could still be in the in_buffer
             if nstate_prime != Giskard.flip_timeout(nstate):
-                import pdb;
-                pdb.set_trace()
+                return False
+            Giskard.inc_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
             return nstate_prime == Giskard.flip_timeout(nstate)
         else:
+            Giskard.inc_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
             return True
 
     # endregion
@@ -1734,8 +1736,11 @@ class Giskard:
     def protocol_trace(gtrace: GTrace, old_version=False) -> bool:
         nodes = list(set(gtrace.gtrace[-1].gstate.keys()))
         nodes.sort(key=lambda h: int(h, 16))
-        Giskard.reset_nr_of_checked_transitions()
+        Giskard.reset_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
+        Giskard.reset_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")
+        last_gstates = {}
         for node in nodes:
+            last_gstates.update({node: None})
             for i in range(0, len(gtrace.gtrace)):
                 if i > 0 and gtrace.gtrace[i].gstate[node][-1] == gtrace.gtrace[i - 1].gstate[node][-1]:
                     continue  # the gtrace is updated after every local state transition, so only one node will have a new transition -> skip the rest
@@ -1744,11 +1749,43 @@ class Giskard:
 
                 tmp_gstate = gtrace.gtrace[i]
                 next_gstate = Giskard.get_nodes_next_state(gtrace, i, node)
-                if not next_gstate:  # this node has no further transition
+                if not next_gstate or next_gstate.gstate[node][-1] == last_gstates[node]:  # this node has no further transition or it was already tested
                     continue
                 if not Giskard.GState_transition(tmp_gstate, next_gstate, node, nodes, old_version):
+                    Giskard.output_state_measures(len(nodes), len(gtrace.gtrace))
                     return False
+                last_gstates.update({node: next_gstate.gstate[node][-1]})
+        Giskard.output_state_measures(nodes, gtrace)
         return True
+
+    @staticmethod
+    def output_state_measures(nodes, gtrace):
+        """ store quantitative measures """
+        nr_of_nodes = len(nodes)
+        node_states = Giskard.get_nr_of_states_per_node(gtrace, nodes)
+        nr_of_transitions = 0
+        for node in nodes:
+            nr_of_transitions += node_states[node] - 1
+
+        checked_transitions = Giskard.get_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
+        irrelevant_transitions = Giskard.get_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")  # the transition from initial state to sth are not checked, as nothing happens during the transition, also the states that are left open, as the network got stopped before
+
+        table = [['Total Transitions', 'Irrelevant Transitions', 'Tested Transitions', 'Untested Transitions'],
+                 [nr_of_transitions, irrelevant_transitions, checked_transitions,
+                  nr_of_transitions - irrelevant_transitions - checked_transitions]]
+        print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
+        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
+        f = open(file_name, 'a')
+        f.write("\n" + tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
+        f.close()
+
+    @staticmethod
+    def get_nr_of_states_per_node(gtrace: GTrace, nodes) -> dict:
+        final_gstate = gtrace.gtrace[-1]
+        node_states = {}
+        for node in nodes:
+            node_states[node] = len(final_gstate.gstate[node])
+        return node_states
 
     @staticmethod
     def get_nodes_next_state(gtrace: GTrace, i: int, node: str):
@@ -1762,25 +1799,26 @@ class Giskard:
                     return gtrace.gtrace[j]
             except KeyError as e:
                 print(e)
-                print("Sometimes key")
         return None
 
     @staticmethod
-    def inc_nr_of_checked_transitions():
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
+    def get_nr_of_transitions(file_name):
         f = open(file_name)
         content = f.read()
         nr = jsonpickle.decode(content)
         f.close()
-        nr = int(nr)
+        return int(nr)
+
+    @staticmethod
+    def inc_nr_of_transitions(file_name):
+        nr = Giskard.get_nr_of_transitions(file_name)
         nr += 1
         f = open(file_name, "w")
         f.write(str(nr))
         f.close()
 
     @staticmethod
-    def reset_nr_of_checked_transitions():
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json"
+    def reset_nr_of_transitions(file_name):
         f = open(file_name, "w")
         f.write(str(0))
         f.close()
@@ -1920,8 +1958,11 @@ class Giskard:
         quorum PrepareVote messages or a PrepareQC message in the current view or
         some previous view. """
         child_block = node.block_cache.block_store.get_child_block(block)
-        return child_block is not None \
-            and node.block_cache.block_store.get_parent_block(child_block) == block \
+        parent_block = None
+        if child_block is not None:
+            parent_block = node.block_cache.block_store.get_parent_block(child_block)
+        return child_block is not None and parent_block is not None and block is not None \
+            and parent_block == block \
             and Giskard.prepare_stage(gtrace.gtrace[i].gstate[node.node_id][-1], block, peers) \
             and Giskard.prepare_stage(gtrace.gtrace[i].gstate[node.node_id][-1], child_block, peers)
 
