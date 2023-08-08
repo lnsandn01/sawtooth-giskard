@@ -52,11 +52,11 @@ make
 - ADD `quorum_msg_for_block` predicate
 - CHANGE `process_PrepareBlock_vote` predicate (use quorum message)
 - ADD `prepare_qc_already_sent` boolean function (predicate)
-- CHANGE `process_PrepareVote_vote` predicate (use `prepare_qc_already_sent`)
+- CHANGE `process_PrepareVote_vote` predicate (use `vote_quorum_in_view` and `prepare_qc_already_sent`)
 - CHANGE `process_PrepareQC_last_block_new_proposer` predicate (use quorum message)
 - ADD `process_ViewChange_quorum_not_new_proposer` predicate
-- CHANGE `process_ViewChangeQC_single` predicate
-- ADD `pending_PrepareVote_malicious`
+- CHANGE `process_ViewChangeQC_single` predicate (cannot guarantee message has been received)
+- ADD `pending_PrepareVote_malicious` (used in `process_PrepareBlock_malicious_vote`)
 - CHANGE `process_PrepareBlock_malicious_vote` (use quorum message)
 - CHANGE `NState_transition_type` (add `process_ViewChange_quorum_not_new_proposer_type`)
 - CHANGE `get_transition` (fix `process_PrepareBlock_vote_type` case, add case for `process_ViewChange_quorum_not_new_proposer_type`)
