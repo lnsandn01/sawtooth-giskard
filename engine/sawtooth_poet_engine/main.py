@@ -82,6 +82,12 @@ def parse_args(args):
         type=str,
         help='gives initial peers to connect to')
 
+    parser.add_argument(
+        '-t', '--timeout_test',
+        default="0",
+        type=str,
+        help='gives the timeout test that should be run')
+
     return parser.parse_args(args)
 
 
@@ -115,14 +121,16 @@ def main(args=None):
                 path_config=path_config,
                 component_endpoint=opts.component,
                 dishonest=opts.dishonest,
-                peers=opts.peers))"""
+                peers=opts.peers,
+                timeout_test=opts.timeout_test))"""
         driver = ZmqDriver(
             GiskardEngine(
                 path_config=path_config,
                 component_endpoint=opts.component,
                 validator_connect=opts.connect,
                 dishonest=opts.dishonest,
-                k_peers=int(opts.k_peers)))
+                k_peers=int(opts.k_peers),
+                timeout_test=int(opts.timeout_test)))
 
         driver.start(endpoint=opts.connect)
 

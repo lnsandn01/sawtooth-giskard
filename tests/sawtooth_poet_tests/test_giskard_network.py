@@ -59,7 +59,9 @@ class TestGiskardNetwork(unittest.TestCase):
                 'ztest_maximum_win_deviation': 3.075,
                 'ztest_minimum_win_count': 3
             },
-            'dishonest_nodes': 1})
+            'dishonest_nodes': 0,
+            'timeout_test': 4
+        })
 
     def test_poet_smoke(self):
         '''
@@ -89,7 +91,8 @@ class TestGiskardNetwork(unittest.TestCase):
             batches=10,
             time_between_batches=1,
             poet_kwargs=None,
-            dishonest_nodes=0):
+            dishonest_nodes=0,
+            timeout_test=0):
         '''
         The tests that actually run are just wrappers around
         this function. The intent is to make it easy to tweak
@@ -107,7 +110,7 @@ class TestGiskardNetwork(unittest.TestCase):
         giskard_tester = GiskardTester(start_nodes_per_round)
         self.start_new_nodes(
             processors, peering, schedulers,
-            start_nodes_per_round, 0, poet_kwargs, dishonest_nodes)
+            start_nodes_per_round, 0, poet_kwargs, dishonest_nodes, timeout_test)
         LOGGER.info("\n\nstarted nodes\n\n")
         for round_ in range(rounds):
             if round_ == 0:
@@ -189,7 +192,8 @@ class TestGiskardNetwork(unittest.TestCase):
                         start_nodes_per_round,
                         round_,
                         poet_kwargs,
-                        dishonest_nodes):
+                        dishonest_nodes,
+                        timeout_test):
         start = round_ * start_nodes_per_round
         started_dishonest_nodes = 0
         for num in range(start, start + start_nodes_per_round):
@@ -198,7 +202,7 @@ class TestGiskardNetwork(unittest.TestCase):
                 dishonest = True
             else:
                 dishonest = False
-            self.start_node(num, processors, peering, schedulers, poet_kwargs, dishonest, start_nodes_per_round)
+            self.start_node(num, processors, peering, schedulers, poet_kwargs, dishonest, start_nodes_per_round, timeout_test)
 
     def start_node(self, num,
                    processors,
@@ -206,14 +210,15 @@ class TestGiskardNetwork(unittest.TestCase):
                    schedulers,
                    poet_kwargs,
                    dishonest,
-                   k_peers):
+                   k_peers,
+                   timeout_test):
         LOGGER.info('Starting node %s', num)
         sawtooth_home = mkdtemp()
         with SetSawtoothHome(sawtooth_home):
             processes = NodeController.start_node(
                 num, processors, peering, schedulers,
                 sawtooth_home, NodeController.validator_cmds,
-                poet_kwargs, dishonest, k_peers)
+                poet_kwargs, dishonest, k_peers, timeout_test)
 
         # Check that none of the processes have returned
         for proc in processes:

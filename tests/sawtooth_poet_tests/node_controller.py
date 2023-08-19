@@ -106,10 +106,11 @@ def start_node(num,
                validator_cmd_func,
                poet_kwargs,
                dishonest,
-               k_peers):
+               k_peers,
+               timeout_test):
     rest_api = start_rest_api(num)
     processors = start_processors(num, processor_func)
-    engine = start_engine(num, dishonest, k_peers)
+    engine = start_engine(num, dishonest, k_peers, timeout_test)
     validator = start_validator(num,
                                 peering_func,
                                 scheduler_func,
@@ -327,17 +328,18 @@ def start_processors(num, processor_func):
 
 # consensus engine
 
-def engine_cmd(num, dishonest, k_peers): # TODO this is the place to connect to the consensus alg, i can set honest / dishonest here
-    return 'poet-engine --connect {s} {v} {d} {k}'.format(
+def engine_cmd(num, dishonest, k_peers, timeout_test): # TODO this is the place to connect to the consensus alg, i can set honest / dishonest here
+    return 'poet-engine --connect {s} {v} {d} {k} {t}'.format(
         s=engine_connection_address(num),
         v='-v ',
         d='-d ' if dishonest else '',
-        k='-k ' + str(k_peers)
+        k='-k ' + str(k_peers),
+        t='-t ' + str(timeout_test)
     )
 
 
-def start_engine(num, dishonest=False, k_peers=2):
-    return start_process(engine_cmd(num, dishonest, k_peers))
+def start_engine(num, dishonest=False, k_peers=2, timeout_test=0):
+    return start_process(engine_cmd(num, dishonest, k_peers, timeout_test))
 
 
 # rest_api

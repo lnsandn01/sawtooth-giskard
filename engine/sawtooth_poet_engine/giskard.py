@@ -1274,6 +1274,9 @@ class Giskard:
         #  will handle this issue in the future as solving it might result in more unwanted behavior
         #  needing the last PrepareBlock message for that to get the correct proposer,
         #  but also need the other nodes to relax the discard msg, during viewchange process
+        #  The problem is that the new proposer might not be the node which had the highest block,
+        #  so it can be that it doesn't have the PrepareQC of it either,
+        #  so it can get the block and the prepareqc from the viewchange message and the bls signature (which will be implemented in the future)
         lm = [GiskardMessage(GiskardMessage.CONSENSUS_GISKARD_PREPARE_QC,
                              # Send ViewChangeQC message before incrementing view to ensure the others can process it
                              state.node_view,
@@ -1761,7 +1764,6 @@ class Giskard:
     @staticmethod
     def output_state_measures(nodes, gtrace):
         """ store quantitative measures """
-        nr_of_nodes = len(nodes)
         node_states = Giskard.get_nr_of_states_per_node(gtrace, nodes)
         nr_of_transitions = 0
         for node in nodes:

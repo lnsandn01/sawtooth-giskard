@@ -56,7 +56,7 @@ class GiskardEngine(Engine):
         Handles incoming messages, validates blocks
         Proposes new Blocks if it is Proposer in the current view"""
 
-    def __init__(self, path_config, component_endpoint, validator_connect, dishonest=False, k_peers=2):
+    def __init__(self, path_config, component_endpoint, validator_connect, dishonest=False, k_peers=2, timeout_test=0):
         # components
         self._path_config = path_config
         self._component_endpoint = component_endpoint
@@ -79,6 +79,7 @@ class GiskardEngine(Engine):
         if self.dishonest:
             LOGGER.info("I am dishonest, node: " + self._validator_connect[-1])
         self.k_peers = k_peers  # the number of participating nodes in this epoche (as of now only one epoche is tested)
+        self.timeout_test = timeout_test  # choosing the kind of controlled timeout test
 
         self.majority_factor = 1
         self.peers = []  # the node_ids of the participating nodes
@@ -263,7 +264,7 @@ class GiskardEngine(Engine):
         }
 
         while True:
-            self._timeout_tests(0)  # for controlled testing of timeout behaviour
+            self._timeout_tests(self.timeout_test)  # for controlled testing of timeout behaviour
 
             if time.time() > self.start_time_view + self.timeout_after and not self.nstate.timeout:
                 self._trigger_view_change()
