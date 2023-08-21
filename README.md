@@ -29,10 +29,13 @@ If you do not want to install Ubuntu onto your computer, consider installing a
 
   - ```sudo apt-get install -y sawtooth python3-sawtooth-poet-cli python3-sawtooth-poet-engine python3-sawtooth-poet-families```
 
-2. Download this repository to a destination of your preference
-   - git clone git@github.com:lnsandn01/sawtooth-giskard.git
+2. Download this repository to /home/repos/
+   - ```cd /home```
+   - ```mkdir repos```
+   - ```cd repos```
+   - ```git clone git@github.com:lnsandn01/sawtooth-giskard.git```
 
-3. Install tools and dependencies
+4. Install tools and dependencies
   - ```sudo apt-get install -y python3-pip```
   - ```sudo apt-get install -y python3-nose2```
 
