@@ -11,7 +11,6 @@ This implementation integrates the protocol into the blockchain-framework Hyperl
 - [Hyperledger Sawtooth framework](https://www.hyperledger.org/use/sawtooth)
 
 # Installation
-!Warning! The project is still in a cleanup phase, installation might not work yet without problems, and testing is still partially manually instrumented!
 
 ## System Requirements
 This library is developed on and intended for systems running:
@@ -22,16 +21,70 @@ If you do not want to install Ubuntu onto your computer, consider installing a
 [virtual machine](https://www.osboxes.org/ubuntu/)
 
 ## Installation Steps
-1. Install [Sawtooth Hyperledger](https://sawtooth.hyperledger.org/docs/1.2/sysadmin_guide/setting_up_sawtooth_network.html) and choose the steps with PoET as the consensus protocol
-2. Download this repository, and replace the files in the respective packages of sawtooth, in the folder /usr/lib/python3/dist-packages/ with the files from this repo
-  - folder in question "sawtooth_poet_engine", "sawtooth_poet_tests"
-3. Install python dependencies by calling: pip install -r requirements.txt
+1. Install Sawtooth Hyperledger with the poet consensus engine
+  - ```sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 8AA7AF1F1091A5FD```
+  - ```sudo add-apt-repository 'deb [arch=amd64] http://repo.sawtooth.me/ubuntu/chime/stable bionic universe'```
+
+  - ```sudo apt-get update```
+
+  - ```sudo apt-get install -y sawtooth python3-sawtooth-poet-cli python3-sawtooth-poet-engine python3-sawtooth-poet-families```
+
+2. Download this repository to a destination of your preference
+   - git clone git@github.com:lnsandn01/sawtooth-giskard.git
+
+3. Install tools and dependencies
+  - ```sudo apt-get install -y python3-pip```
+  - ```sudo apt-get install -y python3-nose2```
+
+  - ```sudo cp -a /mnt/c/repos/sawtooth-giskard/common/requirements.txt  /usr/lib/python3/dist-packages    /sawtooth_poet_common/```
+
+  - ```cd /usr/lib/python3/dist-packages/sawtooth_poet_common/```
+  - ```pip3 install -r requirements.txt```
+    
+4. Replace the files in your local sawtooth install with my code
+``` cd /usr/lib/python3/dist-packages/sawtoot_poet_simulator
+sudo mkdir packaging
+
+sudo cp -a sawtooth-giskard/engine/sawtooth_poet_engine/{engine.py,giskard.py,giskard_block.py,main.py,giskard_global_state.py,giskard_global_trace.py,giskard_message.py,giskard_node.py,giskard_nstate.py,giskard_state_transition_type.py,oracle.py} /usr/lib/python3/dist-packages/sawtooth_poet_engine/
+
+sudo cp -a sawtooth-giskard/tests/sawtooth_poet_tests/ /usr/lib/python3/dist-packages/
+
+sudo cp -a sawtooth-giskard/core/sawtooth_poet/journal/block_wrapper.py /usr/lib/python3/dist-packages/sawtooth_poet/journal/
+
+sudo cp -a sawtooth-giskard/simulator/packaging/simulator_rk_pub.pem /usr/lib/python3/dist-packages/sawtooth_poet_simulator/packaging/
+
+
+sudo cp -a sawtooth-giskard/sawtooth-sdk-python/sawtooth_sdk/consensus/ /usr/lib/python3/dist-packages/sawtooth_sdk/
+
+sudo cp -a sawtooth-giskard/sawtooth-sdk-python/sawtooth_sdk/messaging/  /usr/lib/python3/dist-packages/sawtooth_sdk/
+
+
+sudo cp -a sawtooth-giskard/sawtooth-core/validator/sawtooth_validator/consensus/notifier.py /usr/lib/python3/dist-packages/sawtooth_validator/consensus/
+
+sudo cp -a sawtooth-giskard/sawtooth-core/validator/sawtooth_validator/networking/dispatch.py /usr/lib/python3/dist-packages/sawtooth_validator/networking/
+```
 
 ## Running the Tests
-Go to the folder /usr/lib/python3/dist-packages/ and run the desired tests with the command:
 
 ```
-sudo nose2-3 -c sawtooth_poet_tests/nose2.cfg -v -s sawtooth_poet_tests/ test_giskard_network.TestGiskardNetwork.test_giskard_network > /sawtooth_poet_tests/text.txt  2>&1
+cd /usr/lib/python3/dist-packages/
+
+sudo nose2-3 \
+-c sawtooth_poet_tests/nose2.cfg \
+-v \
+-s \
+sawtooth_poet_tests/ \
+test_giskard_network.TestGiskardNetwork.test_giskard_network 
 ```
 
-This will store the logs from all nodes and the test into a text file. Replace *test_giskard_network.TestGiskardNetwork.**test_giskard_network*** with the desired test. You can find the tests in the file test_giskard_network.py in the folder tests/sawtooth_poet_tests/
+Edit the test variables in the file */usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py* in the function *test_giskard_network*
+to test different behaviour of the Giskard protocol in different situations: *dishonest_nodes* or *timeout_test*.
+<br><br>
+Before running the test again, or to stop the test:
+```
+ps ax | grep 'sawtooth-validator' | awk -F ' ' '{print $1}' | xargs sudo kill -9
+sudo pkill poet
+sudo pkill intkey
+ps ax | grep 'settings-tp' | awk -F ' ' '{print $1}' | xargs sudo kill -9
+sudo pkill sawtooth
+```
