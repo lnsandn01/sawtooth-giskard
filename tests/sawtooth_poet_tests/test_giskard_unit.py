@@ -576,7 +576,7 @@ class TestGiskardUnit(unittest.TestCase):
 
         """ setup quantitative measures """
         table = [['Safety Tests Passed'], ['x']]
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
+        file_name = "/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
         f = open(file_name)
         info_table = f.read()  # temp save
         f.close()

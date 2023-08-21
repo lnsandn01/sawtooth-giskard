@@ -1698,7 +1698,7 @@ class Giskard:
                     and ((not Giskard.is_block_proposer(full_node, nstate.node_view, nodes))
                          or (Giskard.is_block_proposer(full_node, nstate.node_view, nodes)
                              and len(nstate.out_messages) > 0)):  # The state right after the initial proposal
-                Giskard.inc_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")
+                Giskard.inc_nr_of_transitions("/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")
                 return True
             """ Pull out inputs and create a mock block_cache """
             msg, block_cache, lm, dishonest = Giskard.get_inputs_for_transition(process, nstate, nstate_prime,
@@ -1726,10 +1726,10 @@ class Giskard:
                 hanging_prepareqc = nstate.in_messages.pop(0)  # hanging PrepareQC msg could still be in the in_buffer
             if nstate_prime != Giskard.flip_timeout(nstate):
                 return False
-            Giskard.inc_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
+            Giskard.inc_nr_of_transitions("/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
             return nstate_prime == Giskard.flip_timeout(nstate)
         else:
-            Giskard.inc_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
+            Giskard.inc_nr_of_transitions("/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
             return True
 
     # endregion
@@ -1739,8 +1739,8 @@ class Giskard:
     def protocol_trace(gtrace: GTrace, old_version=False) -> bool:
         nodes = list(set(gtrace.gtrace[-1].gstate.keys()))
         nodes.sort(key=lambda h: int(h, 16))
-        Giskard.reset_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
-        Giskard.reset_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")
+        Giskard.reset_nr_of_transitions("/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
+        Giskard.reset_nr_of_transitions("/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")
         last_gstates = {}
         for node in nodes:
             last_gstates.update({node: None})
@@ -1769,14 +1769,14 @@ class Giskard:
         for node in nodes:
             nr_of_transitions += node_states[node] - 1
 
-        checked_transitions = Giskard.get_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
-        irrelevant_transitions = Giskard.get_nr_of_transitions("/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")  # the transition from initial state to sth are not checked, as nothing happens during the transition, also the states that are left open, as the network got stopped before
+        checked_transitions = Giskard.get_nr_of_transitions("/home/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_correct_transitions.json")
+        irrelevant_transitions = Giskard.get_nr_of_transitions("/home/repos/sawtooth-giskard/tests/sawtooth_poet_tests/nr_of_irrelevant_transitions.json")  # the transition from initial state to sth are not checked, as nothing happens during the transition, also the states that are left open, as the network got stopped before
 
         table = [['Total Transitions', 'Irrelevant Transitions', 'Tested Transitions', 'Untested Transitions'],
                  [nr_of_transitions, irrelevant_transitions, checked_transitions,
                   nr_of_transitions - irrelevant_transitions - checked_transitions]]
         print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
+        file_name = "/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
         f = open(file_name, 'a')
         f.write("\n" + tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         f.close()

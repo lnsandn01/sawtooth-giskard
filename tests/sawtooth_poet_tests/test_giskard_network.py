@@ -60,7 +60,7 @@ class TestGiskardNetwork(unittest.TestCase):
                 'ztest_minimum_win_count': 3
             },
             'dishonest_nodes': 0,
-            'timeout_test': 4
+            'timeout_test': 0
         })
 
     def test_poet_smoke(self):

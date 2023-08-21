@@ -49,11 +49,11 @@ class GiskardTester:
         self.broadcast_msgs = []  # a list of all sent messages by the participating nodes
         self.msgs = []
         """ init the test files """
-        self.file_name = self.file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_" + str(
+        self.file_name = self.file_name = "/home/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_" + str(
             int(time.time())) + ".json"
         while not GiskardTester.init_nstate_test_file(self.file_name):
             continue
-        self.file_name2 = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
+        self.file_name2 = "/home/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
         while not GiskardTester.init_nstate_test_file(self.file_name2):
             continue
         """ Start the message receiving loop """
@@ -156,7 +156,7 @@ class GiskardTester:
 
     @staticmethod
     def create_final_GState_from_file() -> GState:
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
+        file_name = "/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
         f = open(file_name)
         content = f.read()
         f.close()
@@ -176,7 +176,7 @@ class GiskardTester:
 
     @staticmethod
     def create_info_table():
-        file_name = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
+        file_name = "/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/tester_nstates.json"
         f = open(file_name)
         content = f.read()
         f.close()
@@ -243,7 +243,7 @@ class GiskardTester:
                         table[pos][8] = "c"  # carryover block from ViewChangeQC message
 
         print(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
-        file_name3 = "/mnt/c/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
+        file_name3 = "/home/repos/repos/sawtooth-giskard/tests/sawtooth_poet_tests/info_table.txt"
         f = open(file_name3, 'w')
         f.write(tabulate(table, headers='firstrow', tablefmt='fancy_grid'))
         f.close()
