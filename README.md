@@ -9,6 +9,7 @@ This implementation integrates the protocol into the blockchain-framework Hyperl
 - as well as [formally in the Coq proof assistant](https://github.com/runtimeverification/giskard-verification).
 - The Coq formalization is described in a [technical report](https://github.com/runtimeverification/giskard-verification/releases/download/v1.0/report.pdf).
 - [Hyperledger Sawtooth framework](https://www.hyperledger.org/use/sawtooth)
+- Previously recorded [test data](https://github.com/lnsandn01/sawtooth-giskard/tree/1b694cd9829875cf26b544df46b1466aef5787b9/tests/sawtooth_poet_tests/test_logs) for comparison
 
 # Installation
 
@@ -81,7 +82,7 @@ test_giskard_network.TestGiskardNetwork.test_giskard_network
 ```
 
 Edit the test variables in the file */usr/lib/python3/dist-packages/sawtooth_poet_tests/test_giskard_network.py* in the function *test_giskard_network*
-to test different behaviour of the Giskard protocol in different situations: *dishonest_nodes* or *timeout_test*.
+to test different behaviour of the Giskard protocol in different situations: *dishonest_nodes*(possible_values:0-4) or *timeout_test*(possible_values:0-4).
 <br><br>
 Before running the test again, or to stop the test:
 ```
